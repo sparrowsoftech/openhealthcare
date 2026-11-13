@@ -1,0 +1,264 @@
+from django.db import transaction
+
+from rest_framework import status
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.response import Response
+from rest_framework.viewsets import GenericViewSet
+
+from care.emr.models.ot import OTPreOperativeAssessment, SurgerySchedule
+from care.emr.models.organization import FacilityOrganizationUser
+from care.facility.models import Facility
+from care.security.authorization import AuthorizationController
+from care.utils.shortcuts import get_object_or_404
+
+
+class OTPreOperativeAssessmentViewSet(GenericViewSet):
+    """
+    Manage the pre-operative assessment for a scheduled surgery.
+
+    One assessment is allowed per surgery schedule.
+    Clinical fitness must be explicitly determined by authorized staff.
+    """
+
+    writable_fields = {
+        "patient_identity_verified",
+        "procedure_verified",
+        "surgical_site_verified",
+        "investigations_reviewed",
+        "investigation_remarks",
+        "consent_status",
+        "consent_remarks",
+        "vitals",
+        "day_before_surgery",
+        "day_of_surgery",
+        "allergies",
+        "clinical_remarks",
+        "anaesthesia_status",
+        "anaesthesia_remarks",
+        "fitness_status",
+        "final_remarks",
+    }
+
+    choice_fields = {
+        "consent_status": {"pending", "obtained", "declined"},
+        "anaesthesia_status": {"pending", "assessed", "needs_review"},
+        "fitness_status": {
+            "pending",
+            "fit",
+            "unfit",
+            "further_evaluation",
+        },
+    }
+
+    boolean_fields = {
+        "patient_identity_verified",
+        "procedure_verified",
+        "surgical_site_verified",
+        "investigations_reviewed",
+    }
+
+    text_fields = {
+        "investigation_remarks",
+        "consent_remarks",
+        "allergies",
+        "clinical_remarks",
+        "anaesthesia_remarks",
+        "final_remarks",
+    }
+
+    def _get_facility(self):
+        facility = get_object_or_404(
+            Facility,
+            external_id=self.kwargs["facility_external_id"],
+        )
+
+        if not FacilityOrganizationUser.objects.filter(
+            organization__facility=facility,
+            user=self.request.user,
+        ).exists():
+            raise PermissionDenied(
+                "You are not a member of this facility."
+            )
+
+        return facility
+
+    def _get_schedule(self, facility, schedule_id):
+        schedule = get_object_or_404(
+            SurgerySchedule.objects.select_related(
+                "service_request",
+                "service_request__patient",
+                "service_request__surgery_procedure",
+                "ot_room",
+                "ot_room__location",
+            ),
+            external_id=schedule_id,
+            facility=facility,
+            deleted=False,
+        )
+
+        if not AuthorizationController.call(
+            "can_read_service_request",
+            self.request.user,
+            schedule.service_request,
+        ):
+            raise PermissionDenied(
+                "You cannot access this Surgery Order."
+            )
+
+        return schedule
+
+    def _assessment_data(self, assessment):
+        schedule = assessment.surgery_schedule
+        order = schedule.service_request
+        patient = order.patient
+        procedure = order.surgery_procedure
+
+        return {
+            "id": str(assessment.external_id),
+            "schedule_id": str(schedule.external_id),
+            "service_request_id": str(order.external_id),
+            "patient_id": str(patient.external_id),
+            "patient_name": patient.name,
+            "age": (
+                patient.age
+                if patient.date_of_birth or patient.year_of_birth
+                else None
+            ),
+            "gender": patient.gender,
+            "surgery_procedure": (
+                procedure.procedure_name if procedure else order.title
+            ),
+            "ot_room": schedule.ot_room.location.name,
+            "scheduled_start": schedule.scheduled_start.isoformat(),
+            "patient_identity_verified": (
+                assessment.patient_identity_verified
+            ),
+            "procedure_verified": assessment.procedure_verified,
+            "surgical_site_verified": assessment.surgical_site_verified,
+            "investigations_reviewed": assessment.investigations_reviewed,
+            "investigation_remarks": assessment.investigation_remarks,
+            "consent_status": assessment.consent_status,
+            "consent_remarks": assessment.consent_remarks,
+            "vitals": assessment.vitals,
+            "day_before_surgery": assessment.day_before_surgery,
+            "day_of_surgery": assessment.day_of_surgery,
+            "allergies": assessment.allergies,
+            "clinical_remarks": assessment.clinical_remarks,
+            "anaesthesia_status": assessment.anaesthesia_status,
+            "anaesthesia_remarks": assessment.anaesthesia_remarks,
+            "fitness_status": assessment.fitness_status,
+            "final_remarks": assessment.final_remarks,
+        }
+
+    def list(self, request, *args, **kwargs):
+        facility = self._get_facility()
+
+        assessments = (
+            OTPreOperativeAssessment.objects.filter(
+                facility=facility,
+                deleted=False,
+            )
+            .select_related(
+                "surgery_schedule",
+                "surgery_schedule__service_request",
+                "surgery_schedule__service_request__patient",
+                "surgery_schedule__service_request__surgery_procedure",
+                "surgery_schedule__ot_room",
+                "surgery_schedule__ot_room__location",
+            )
+            .order_by("-modified_date")
+        )
+
+        schedule_id = request.query_params.get("schedule_id")
+        if schedule_id:
+            assessments = assessments.filter(
+                surgery_schedule__external_id=schedule_id
+            )
+
+        results = []
+
+        for assessment in assessments:
+            if AuthorizationController.call(
+                "can_read_service_request",
+                request.user,
+                assessment.surgery_schedule.service_request,
+            ):
+                results.append(self._assessment_data(assessment))
+
+        return Response({
+            "count": len(results),
+            "results": results,
+        })
+
+    def create(self, request, *args, **kwargs):
+        """
+        Create or update the assessment for an existing surgery schedule.
+
+        POST requires schedule_id. Repeated POST requests update the
+        existing assessment instead of creating duplicates.
+        """
+        facility = self._get_facility()
+        schedule_id = request.data.get("schedule_id")
+
+        if not schedule_id:
+            raise ValidationError({
+                "schedule_id": "This field is required."
+            })
+
+        schedule = self._get_schedule(facility, schedule_id)
+
+        data = {
+            key: value
+            for key, value in request.data.items()
+            if key in self.writable_fields
+        }
+
+        for field in self.choice_fields:
+            if field in data and data[field] not in self.choice_fields[field]:
+                raise ValidationError({
+                    field: "Invalid choice."
+                })
+
+        for field in self.boolean_fields:
+            if field in data and not isinstance(data[field], bool):
+                raise ValidationError({
+                    field: "A boolean value is required."
+                })
+
+        for field in self.text_fields:
+            if field in data and not isinstance(data[field], str):
+                raise ValidationError({
+                    field: "A string value is required."
+                })
+
+        if "vitals" in data and not isinstance(data["vitals"], dict):
+            raise ValidationError({
+                "vitals": "Vitals must be provided as a JSON object."
+            })
+
+        for field in ("day_before_surgery", "day_of_surgery"):
+            if field in data and not isinstance(data[field], dict):
+                raise ValidationError({
+                    field: "Checklist data must be provided as a JSON object."
+                })
+
+        with transaction.atomic():
+            assessment, created = (
+                OTPreOperativeAssessment.objects.update_or_create(
+                    facility=facility,
+                    surgery_schedule=schedule,
+                    defaults=data,
+                )
+            )
+
+        return Response(
+            {
+                "message": (
+                    "Pre-operative assessment created."
+                    if created
+                    else "Pre-operative assessment updated."
+                ),
+                "assessment": self._assessment_data(assessment),
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )

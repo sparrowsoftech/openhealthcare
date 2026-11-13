@@ -2,25 +2,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import Loading from "@/components/Common/Loading";
 import Page from "@/components/Common/Page";
 import { LocationSearch } from "@/components/Location/LocationSearch";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import query from "@/Utils/request/query";
 import mutate from "@/Utils/request/mutate";
+import query from "@/Utils/request/query";
 
-import otApi, {
-  OTRoom,
-  OTRoomStatus,
-  OTRoomWrite,
-} from "@/types/ot/otApi";
+import otApi, { OTRoom, OTRoomStatus, OTRoomWrite } from "@/types/ot/otApi";
 
 import { LocationRead } from "@/types/location/location";
 
@@ -33,6 +24,7 @@ const initialForm: OTRoomWrite = {
   description: "",
   equipment_details: [],
   status: "available",
+  surgery_procedures: [],
 };
 
 const statusLabels: Record<OTRoomStatus, string> = {
@@ -46,8 +38,9 @@ export default function OTSetup({ facilityId }: Props) {
   const queryClient = useQueryClient();
 
   const [form, setForm] = useState<OTRoomWrite>(initialForm);
-  const [selectedLocation, setSelectedLocation] =
-    useState<LocationRead | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<LocationRead | null>(
+    null,
+  );
   const [equipmentText, setEquipmentText] = useState("");
   const [editingRoom, setEditingRoom] = useState<string | null>(null);
 
@@ -92,13 +85,7 @@ export default function OTSetup({ facilityId }: Props) {
   });
 
   const updateRoom = useMutation({
-    mutationFn: ({
-      roomId,
-      data,
-    }: {
-      roomId: string;
-      data: OTRoomWrite;
-    }) =>
+    mutationFn: ({ roomId, data }: { roomId: string; data: OTRoomWrite }) =>
       mutate(otApi.update, {
         pathParams: { facilityId, roomId },
       })(data),
@@ -153,6 +140,7 @@ export default function OTSetup({ facilityId }: Props) {
       description: room.description ?? "",
       equipment_details: room.equipment_details ?? [],
       status: room.status,
+      surgery_procedures: room.surgery_procedures ?? [],
     });
 
     setEquipmentText((room.equipment_details ?? []).join(", "));
@@ -183,6 +171,7 @@ export default function OTSetup({ facilityId }: Props) {
         .map((item) => item.trim())
         .filter(Boolean),
       status: form.status,
+      surgery_procedures: form.surgery_procedures ?? [],
     };
 
     if (editingRoom) {
@@ -217,9 +206,7 @@ export default function OTSetup({ facilityId }: Props) {
     <Page title="OT Setup">
       <div className="space-y-6 p-4">
         <div>
-          <h1 className="text-2xl font-semibold">
-            Operation Theatre Setup
-          </h1>
+          <h1 className="text-2xl font-semibold">Operation Theatre Setup</h1>
 
           <p className="mt-1 text-sm text-gray-500">
             Configure operation theatre rooms using the existing Location
@@ -309,9 +296,7 @@ export default function OTSetup({ facilityId }: Props) {
                     className="w-full rounded-md border p-2"
                     placeholder="OT Table, Monitor, Ventilator"
                     value={equipmentText}
-                    onChange={(event) =>
-                      setEquipmentText(event.target.value)
-                    }
+                    onChange={(event) => setEquipmentText(event.target.value)}
                   />
 
                   <p className="mt-1 text-xs text-gray-500">
@@ -373,8 +358,8 @@ export default function OTSetup({ facilityId }: Props) {
           <CardContent>
             {rooms.length === 0 ? (
               <p className="py-6 text-center text-gray-500">
-                No OT rooms configured yet. Select a room from Location
-                Master to get started.
+                No OT rooms configured yet. Select a room from Location Master
+                to get started.
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -406,9 +391,7 @@ export default function OTSetup({ facilityId }: Props) {
                           </span>
                         </td>
 
-                        <td className="p-3">
-                          {room.description || "—"}
-                        </td>
+                        <td className="p-3">{room.description || "—"}</td>
 
                         <td className="p-3">
                           <div className="flex gap-2">

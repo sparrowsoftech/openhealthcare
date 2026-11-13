@@ -1,0 +1,157 @@
+import { useQuery } from "@tanstack/react-query";
+import { navigate } from "raviger";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+import Loading from "@/components/Common/Loading";
+import Page from "@/components/Common/Page";
+
+import query from "@/Utils/request/query";
+import otWaitingListApi from "@/types/ot/otWaitingListApi";
+
+interface Props {
+  facilityId: string;
+}
+
+export default function OTWaitingList({ facilityId }: Props) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["ot-waiting-list", facilityId],
+    queryFn: query(otWaitingListApi.list, {
+      pathParams: { facilityId },
+    }),
+  });
+
+  if (isLoading) return <Loading />;
+
+  if (isError) {
+    return (
+      <Page title="OT Waiting List">
+        <p className="p-4 text-red-600">
+          Unable to load OT Waiting List. Please refresh.
+        </p>
+      </Page>
+    );
+  }
+
+  const records = data?.results ?? [];
+
+  return (
+    <Page title="OT Waiting List">
+      <div className="space-y-6 p-4">
+        <div>
+          <h1 className="text-2xl font-semibold">OT Waiting List</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Patients whose surgery orders are waiting for OT scheduling.
+          </p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Pending Surgery Orders ({data?.count ?? 0})</CardTitle>
+          </CardHeader>
+
+          <CardContent>
+            {records.length === 0 ? (
+              <p className="py-6 text-center text-sm text-gray-500">
+                No surgery orders are waiting.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Patient</TableHead>
+                      <TableHead>Age / Gender</TableHead>
+                      <TableHead>Surgery</TableHead>
+                      <TableHead>Doctor</TableHead>
+                      <TableHead>Order Date</TableHead>
+                      <TableHead>Priority</TableHead>
+                      <TableHead>Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+
+                  <TableBody>
+                    {records.map((order) => (
+                      <TableRow key={order.id}>
+                        <TableCell>
+                          <div className="font-medium">
+                            {order.patient_name}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {order.registration_id || order.patient_id}
+                          </div>
+                        </TableCell>
+
+                        <TableCell>
+                          {order.age ?? "—"} / {order.gender || "—"}
+                        </TableCell>
+
+                        <TableCell>
+                          <div className="font-medium">
+                            {order.surgery_procedure}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {order.procedure_code || "—"}
+                          </div>
+                        </TableCell>
+
+                        <TableCell>{order.doctor_name || "—"}</TableCell>
+
+                        <TableCell>
+                          {order.order_date
+                            ? new Date(order.order_date).toLocaleString()
+                            : "—"}
+                        </TableCell>
+
+                        <TableCell>
+                          <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium capitalize text-blue-800">
+                            {order.priority}
+                          </span>
+                        </TableCell>
+
+                        <TableCell>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                navigate(
+                                  `/facility/${facilityId}/ot/patient/${encodeURIComponent(order.patient_id)}?service_request_id=${encodeURIComponent(order.service_request_id)}`,
+                                )
+                              }
+                            >
+                              View Patient
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                navigate(
+                                  `/facility/${facilityId}/ot/scheduling/new?service_request_id=${encodeURIComponent(order.service_request_id)}`,
+                                )
+                              }
+                            >
+                              Schedule Surgery
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </Page>
+  );
+}

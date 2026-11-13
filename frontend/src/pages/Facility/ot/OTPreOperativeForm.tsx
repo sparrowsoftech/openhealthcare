@@ -1,0 +1,805 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { navigate } from "raviger";
+import { useEffect, useState, type FormEvent } from "react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+
+import mutate from "@/Utils/request/mutate";
+import query from "@/Utils/request/query";
+
+import otPreOperativeApi, {
+  type OTPreOperativeAssessment,
+  type OTPreOperativeAssessmentInput,
+} from "@/types/ot/otPreOperativeApi";
+import otSchedulingApi, { type OTSchedule } from "@/types/ot/otSchedulingApi";
+import surgeryAnaesthesiaConfigApi, {
+  type SurgeryAnaesthesiaConfig,
+} from "@/types/ot/surgeryAnaesthesiaConfigApi";
+
+interface Props {
+  facilityId: string;
+  scheduleId?: string;
+}
+
+type AssessmentForm = Omit<OTPreOperativeAssessmentInput, "schedule_id">;
+
+const initialForm: AssessmentForm = {
+  anaesthesia_config_id: null,
+  patient_identity_verified: false,
+  procedure_verified: false,
+  surgical_site_verified: false,
+  investigations_reviewed: false,
+  investigation_remarks: "",
+  consent_status: "pending",
+  consent_remarks: "",
+  vitals: {
+    blood_pressure: "",
+    pulse: "",
+    temperature: "",
+    spo2: "",
+    weight: "",
+  },
+  day_before_surgery: {
+    proposed_anaesthesia_surgery: false,
+    weight_checked: false,
+    allergy_history: false,
+    relevant_past_history: false,
+    long_term_medication_reviewed: false,
+    consent_confirmed: false,
+    preop_counselling: false,
+    skin_bowel_preparation: false,
+    clinical_observations: false,
+    reports_reviewed: false,
+    fasting_instructions_given: false,
+  },
+  day_of_surgery: {
+    npo_confirmed: false,
+    bath_skin_prep: false,
+    ryles_tube_if_indicated: false,
+    gown_personal_items_checked: false,
+    vitals_checked: false,
+    bladder_emptied_or_catheterized: false,
+    premedication_iv_line: false,
+    reports_medicines_equipment_sent: false,
+    departure_time_from_ward: "",
+  },
+  allergies: "",
+  clinical_remarks: "",
+  anaesthesia_status: "pending",
+  anaesthesia_remarks: "",
+  fitness_status: "pending",
+  final_remarks: "",
+};
+
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex h-full flex-col overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+      <div className="flex items-center gap-2 px-3 py-2">
+        <span className="h-5 w-1 shrink-0 rounded-r-sm bg-gray-400" />
+        <h3 className="text-base font-semibold text-gray-700">{title}</h3>
+      </div>
+      <div className="m-2 mt-1 flex-1 space-y-3 rounded-lg bg-white p-3 shadow-sm sm:p-3">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0 space-y-1">
+      <label className="block text-xs font-medium text-gray-600 sm:text-sm">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+export default function OTPreOperativeForm({ facilityId, scheduleId }: Props) {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<AssessmentForm>(initialForm);
+
+  const assessmentQuery = useQuery({
+    queryKey: ["ot-preoperative", facilityId, scheduleId],
+    queryFn: query(otPreOperativeApi.list, {
+      pathParams: { facilityId },
+    }),
+    enabled: !!scheduleId,
+  });
+
+  const scheduleQuery = useQuery({
+    queryKey: ["ot-schedules", facilityId],
+    queryFn: query(otSchedulingApi.list, {
+      pathParams: { facilityId },
+    }),
+    enabled: !!scheduleId,
+  });
+
+  const configsQuery = useQuery({
+    queryKey: ["surgery-anaesthesia-config", facilityId],
+    queryFn: query(surgeryAnaesthesiaConfigApi.list, {
+      pathParams: { facilityId },
+    }),
+    enabled: !!scheduleId,
+  });
+
+  const schedule = scheduleQuery.data?.results?.find(
+    (item: OTSchedule) => item.id === scheduleId,
+  );
+
+  const activeConfigs = (configsQuery.data?.results ?? []).filter(
+    (config: SurgeryAnaesthesiaConfig) => {
+      if (config.status !== "active") return false;
+      if (!schedule) return false;
+
+      return (
+        config.surgery_procedure_name.trim().toLowerCase() ===
+        schedule.surgery_procedure.trim().toLowerCase()
+      );
+    },
+  );
+
+  const assessment = assessmentQuery.data?.results?.find(
+    (item: OTPreOperativeAssessment) => item.schedule_id === scheduleId,
+  );
+
+  useEffect(() => {
+    if (!assessment) {
+      setForm({
+        ...initialForm,
+        anaesthesia_config_id: schedule?.anaesthesia_config_id ?? null,
+        vitals: { ...initialForm.vitals },
+        day_before_surgery: { ...initialForm.day_before_surgery },
+        day_of_surgery: { ...initialForm.day_of_surgery },
+      });
+      return;
+    }
+
+    setForm({
+      anaesthesia_config_id: assessment.anaesthesia_config_id ?? null,
+      patient_identity_verified: assessment.patient_identity_verified,
+      procedure_verified: assessment.procedure_verified,
+      surgical_site_verified: assessment.surgical_site_verified,
+      investigations_reviewed: assessment.investigations_reviewed,
+      investigation_remarks: assessment.investigation_remarks ?? "",
+      consent_status: assessment.consent_status,
+      consent_remarks: assessment.consent_remarks ?? "",
+      vitals: {
+        ...initialForm.vitals,
+        ...(assessment.vitals ?? {}),
+      },
+      day_before_surgery: {
+        ...initialForm.day_before_surgery,
+        ...(assessment.day_before_surgery ?? {}),
+      },
+      day_of_surgery: {
+        ...initialForm.day_of_surgery,
+        ...(assessment.day_of_surgery ?? {}),
+      },
+      allergies: assessment.allergies ?? "",
+      clinical_remarks: assessment.clinical_remarks ?? "",
+      anaesthesia_status: assessment.anaesthesia_status,
+      anaesthesia_remarks: assessment.anaesthesia_remarks ?? "",
+      fitness_status: assessment.fitness_status,
+      final_remarks: assessment.final_remarks ?? "",
+    });
+  }, [assessment, schedule?.anaesthesia_config_id]);
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: OTPreOperativeAssessmentInput) =>
+      mutate(otPreOperativeApi.save, {
+        pathParams: { facilityId },
+      })(payload),
+
+    onSuccess: async () => {
+      toast.success("Pre-operative assessment saved successfully.");
+
+      await queryClient.invalidateQueries({
+        queryKey: ["ot-preoperative", facilityId],
+      });
+      await assessmentQuery.refetch();
+
+      const returnTo = new URLSearchParams(window.location.search).get(
+        "return_to",
+      );
+      if (
+        returnTo &&
+        returnTo.startsWith(`/facility/${facilityId}/ot/patient/`)
+      ) {
+        navigate(returnTo);
+      }
+    },
+
+    onError: (error: unknown) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to save the pre-operative assessment.",
+      );
+    },
+  });
+
+  const updateField = <K extends keyof AssessmentForm>(
+    key: K,
+    value: AssessmentForm[K],
+  ) => {
+    setForm((previous) => ({ ...previous, [key]: value }));
+  };
+
+  const updateChecklist = (
+    section: "day_before_surgery" | "day_of_surgery",
+    key: string,
+    value: boolean | string,
+  ) => {
+    setForm((previous) => ({
+      ...previous,
+      [section]: {
+        ...previous[section],
+        [key]: value,
+      },
+    }));
+  };
+
+  const updateVital = (key: string, value: string) => {
+    setForm((previous) => ({
+      ...previous,
+      vitals: {
+        ...previous.vitals,
+        [key]: value,
+      },
+    }));
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!scheduleId) {
+      toast.error(
+        "Please schedule the surgery before completing this assessment.",
+      );
+      return;
+    }
+
+    saveMutation.mutate({
+      schedule_id: scheduleId,
+      ...form,
+    });
+  };
+
+  if (!scheduleId) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Pre-Operative Checklist</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground text-sm">
+            No surgery schedule is linked to this patient. Please schedule the
+            surgery before completing the pre-operative assessment.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (assessmentQuery.isLoading) {
+    return (
+      <p className="text-muted-foreground text-sm">Loading assessment...</p>
+    );
+  }
+
+  if (assessmentQuery.isError) {
+    return (
+      <Card>
+        <CardContent className="space-y-3 p-5">
+          <p className="text-destructive">
+            Unable to load the pre-operative assessment.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => assessmentQuery.refetch()}
+          >
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3 pb-3">
+      <Card className="rounded-xl border shadow-sm">
+        <div className="bg-background/95 sticky top-0 z-30 rounded-t-xl border-b p-3 shadow-sm backdrop-blur sm:p-4">
+          <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mb-3"
+                onClick={() => {
+                  const params = new URLSearchParams(window.location.search);
+                  const returnTo = params.get("return_to");
+                  const patientId = params.get("patient_id");
+
+                  if (
+                    returnTo &&
+                    returnTo.startsWith(`/facility/${facilityId}/ot/patient/`)
+                  ) {
+                    navigate(returnTo);
+                  } else if (patientId) {
+                    navigate(
+                      `/facility/${facilityId}/ot/patient/${encodeURIComponent(patientId)}?tab=preop`,
+                    );
+                  } else {
+                    window.history.back();
+                  }
+                }}
+              >
+                ← Back to List
+              </Button>
+              <p className="text-primary text-xs font-semibold tracking-widest uppercase">
+                Operation Theatre
+              </p>
+              <h2 className="mt-1 text-xl font-bold tracking-tight">
+                Pre-Operative Assessment
+              </h2>
+
+              <p className="text-muted-foreground mt-1 max-w-2xl text-xs sm:text-sm">
+                Complete the required safety checks and clinical assessment
+                before proceeding with surgery.
+              </p>
+            </div>
+            <div className="bg-background inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium sm:text-sm">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  assessment ? "bg-green-500" : "bg-amber-500"
+                }`}
+              />
+              {assessment ? "Assessment Available" : "New Assessment"}
+            </div>
+          </div>
+        </div>
+        <CardContent className="grid gap-2 p-3 sm:grid-cols-3">
+          <div className="bg-muted/20 rounded-lg border p-2">
+            <p className="text-muted-foreground text-xs">
+              Patient verification
+            </p>
+            <p className="mt-0.5 text-sm font-medium">
+              {
+                [
+                  form.patient_identity_verified,
+                  form.procedure_verified,
+                  form.surgical_site_verified,
+                ].filter(Boolean).length
+              }{" "}
+              of 3 completed
+            </p>
+          </div>
+          <div className="bg-muted/20 rounded-lg border p-2">
+            <p className="text-muted-foreground text-xs">Consent</p>
+            <p className="mt-1 font-medium capitalize">
+              {form.consent_status.replaceAll("_", " ")}
+            </p>
+          </div>
+          <div className="bg-muted/20 rounded-lg border p-2">
+            <p className="text-muted-foreground text-xs">Surgical fitness</p>
+            <p className="mt-1 font-medium capitalize">
+              {form.fitness_status.replaceAll("_", " ")}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
+        <Section title="1. Patient and Procedure Verification">
+          <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+            {(
+              [
+                ["patient_identity_verified", "Patient identity verified"],
+                ["procedure_verified", "Surgical procedure verified"],
+                ["surgical_site_verified", "Surgical site verified"],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form[key]}
+                  onChange={(event) => updateField(key, event.target.checked)}
+                  className="h-4 w-4"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </Section>
+
+        <Section title="2. Investigations and Reports">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.investigations_reviewed}
+              onChange={(event) =>
+                updateField("investigations_reviewed", event.target.checked)
+              }
+              className="h-4 w-4"
+            />
+            Required investigations and reports reviewed
+          </label>
+
+          <Field label="Investigation remarks">
+            <Textarea
+              className="min-h-[64px] resize-y"
+              value={form.investigation_remarks}
+              onChange={(event) =>
+                updateField("investigation_remarks", event.target.value)
+              }
+              placeholder="Enter investigation findings or pending reports"
+            />
+          </Field>
+        </Section>
+      </div>
+
+      <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
+        <Section title="3. Consent">
+          <Field label="Consent status">
+            <select
+              value={form.consent_status}
+              onChange={(event) =>
+                updateField(
+                  "consent_status",
+                  event.target.value as AssessmentForm["consent_status"],
+                )
+              }
+              className="bg-background flex h-9 w-full rounded-md border px-3 py-1.5 text-sm"
+            >
+              <option value="pending">Pending</option>
+              <option value="obtained">Obtained</option>
+              <option value="declined">Declined</option>
+            </select>
+          </Field>
+
+          <Field label="Consent remarks">
+            <Textarea
+              className="min-h-[64px] resize-y"
+              value={form.consent_remarks}
+              onChange={(event) =>
+                updateField("consent_remarks", event.target.value)
+              }
+              placeholder="Record consent-related remarks"
+            />
+          </Field>
+        </Section>
+
+        <Section title="4. Day Before Surgery Checklist">
+          <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+            {(
+              [
+                [
+                  "proposed_anaesthesia_surgery",
+                  "Proposed surgery and anaesthesia confirmed",
+                ],
+                ["weight_checked", "Patient weight checked and recorded"],
+                [
+                  "allergy_history",
+                  "Drug allergy / hypersensitivity history checked",
+                ],
+                [
+                  "relevant_past_history",
+                  "Relevant past medical history reviewed",
+                ],
+                [
+                  "long_term_medication_reviewed",
+                  "Long-term medications reviewed",
+                ],
+                ["consent_confirmed", "Surgical consent checked"],
+                [
+                  "preop_counselling",
+                  "Pre-operative exercises and counselling completed",
+                ],
+                [
+                  "skin_bowel_preparation",
+                  "Skin bath or bowel preparation completed if indicated",
+                ],
+                [
+                  "clinical_observations",
+                  "Cough, vital signs and clinical observations checked",
+                ],
+                [
+                  "reports_reviewed",
+                  "X-ray, ECG and laboratory reports reviewed",
+                ],
+                [
+                  "fasting_instructions_given",
+                  "Fasting instructions explained",
+                ],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.day_before_surgery[key])}
+                  onChange={(event) =>
+                    updateChecklist(
+                      "day_before_surgery",
+                      key,
+                      event.target.checked,
+                    )
+                  }
+                  className="mt-0.5 h-4 w-4"
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
+        </Section>
+      </div>
+
+      <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
+        <Section title="5. Day of Surgery Checklist">
+          <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+            {(
+              [
+                ["npo_confirmed", "NPO / fasting status confirmed"],
+                ["bath_skin_prep", "Bath and skin preparation completed"],
+                ["ryles_tube_if_indicated", "Ryles tube checked if indicated"],
+                [
+                  "gown_personal_items_checked",
+                  "OT gown and personal items checked",
+                ],
+                ["vitals_checked", "Pre-operative vital signs checked"],
+                [
+                  "bladder_emptied_or_catheterized",
+                  "Bladder emptied / catheterization done if indicated",
+                ],
+                ["premedication_iv_line", "Premedication and IV line checked"],
+                [
+                  "reports_medicines_equipment_sent",
+                  "Reports, medicines and equipment sent with patient",
+                ],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.day_of_surgery[key])}
+                  onChange={(event) =>
+                    updateChecklist("day_of_surgery", key, event.target.checked)
+                  }
+                  className="mt-0.5 h-4 w-4"
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
+
+          <Field label="Time of departure from ward">
+            <Input
+              type="time"
+              value={String(form.day_of_surgery.departure_time_from_ward ?? "")}
+              onChange={(event) =>
+                updateChecklist(
+                  "day_of_surgery",
+                  "departure_time_from_ward",
+                  event.target.value,
+                )
+              }
+            />
+          </Field>
+        </Section>
+
+        <Section title="6. Patient Preparation and Vitals">
+          <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+            {(
+              [
+                ["blood_pressure", "Blood pressure", "e.g. 120/80 mmHg"],
+                ["pulse", "Pulse", "Beats per minute"],
+                ["temperature", "Temperature", "°C"],
+                ["spo2", "SpO2", "%"],
+                ["weight", "Weight", "kg"],
+              ] as const
+            ).map(([key, label, placeholder]) => (
+              <Field key={key} label={label}>
+                <Input
+                  value={String(form.vitals[key] ?? "")}
+                  onChange={(event) => updateVital(key, event.target.value)}
+                  placeholder={placeholder}
+                />
+              </Field>
+            ))}
+          </div>
+
+          <Field label="Known allergies">
+            <Textarea
+              className="min-h-[64px] resize-y"
+              value={form.allergies}
+              onChange={(event) => updateField("allergies", event.target.value)}
+              placeholder="Record known allergies or enter None if confirmed"
+            />
+          </Field>
+
+          <Field label="Clinical remarks">
+            <Textarea
+              className="min-h-[64px] resize-y"
+              value={form.clinical_remarks}
+              onChange={(event) =>
+                updateField("clinical_remarks", event.target.value)
+              }
+              placeholder="Record patient preparation and relevant findings"
+            />
+          </Field>
+        </Section>
+      </div>
+
+      <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
+        <Section title="7. Anaesthesia Assessment">
+          <Field label="Anaesthesia configuration">
+            <select
+              value={form.anaesthesia_config_id ?? ""}
+              onChange={(event) =>
+                updateField("anaesthesia_config_id", event.target.value || null)
+              }
+              className="bg-background flex h-9 w-full rounded-md border px-3 py-1.5 text-sm"
+              disabled={configsQuery.isLoading}
+            >
+              <option value="">Select anaesthesia configuration</option>
+              {activeConfigs.map((config) => (
+                <option key={config.id} value={config.id}>
+                  {config.anaesthesia_format}
+                </option>
+              ))}
+            </select>
+            {configsQuery.isLoading && (
+              <p className="text-muted-foreground text-xs">
+                Loading anaesthesia configurations...
+              </p>
+            )}
+            {!configsQuery.isLoading &&
+              schedule &&
+              activeConfigs.length === 0 && (
+                <p className="text-xs text-amber-700">
+                  No active anaesthesia configuration found for this surgery.
+                </p>
+              )}
+          </Field>
+
+          {(() => {
+            const selectedConfig = activeConfigs.find(
+              (config) => config.id === form.anaesthesia_config_id,
+            );
+
+            if (!selectedConfig) return null;
+
+            return (
+              <div className="bg-muted/20 space-y-2 rounded-md border p-3">
+                <p className="text-sm font-semibold">
+                  {selectedConfig.anaesthesia_format}
+                </p>
+                <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                  <div>
+                    <span className="text-muted-foreground">Age range: </span>
+                    {selectedConfig.age_range || "Not specified"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Gender: </span>
+                    {selectedConfig.gender || "Not specified"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Weight: </span>
+                    {selectedConfig.weight ?? "Not specified"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Dose: </span>
+                    {selectedConfig.dose || "Not specified"}
+                  </div>
+                </div>
+                <div className="text-sm">
+                  <p className="font-medium">Condition</p>
+                  <p className="text-muted-foreground whitespace-pre-wrap">
+                    {selectedConfig.condition || "Not specified"}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+
+          <Field label="Anaesthesia status">
+            <select
+              value={form.anaesthesia_status}
+              onChange={(event) =>
+                updateField(
+                  "anaesthesia_status",
+                  event.target.value as AssessmentForm["anaesthesia_status"],
+                )
+              }
+              className="bg-background flex h-9 w-full rounded-md border px-3 py-1.5 text-sm"
+            >
+              <option value="pending">Pending</option>
+              <option value="assessed">Assessed</option>
+              <option value="needs_review">Needs Review</option>
+            </select>
+          </Field>
+
+          <Field label="Anaesthesia remarks">
+            <Textarea
+              className="min-h-[64px] resize-y"
+              value={form.anaesthesia_remarks}
+              onChange={(event) =>
+                updateField("anaesthesia_remarks", event.target.value)
+              }
+              placeholder="Enter assessment notes"
+            />
+          </Field>
+        </Section>
+
+        <Section title="8. Fitness for Surgery">
+          <Field label="Fitness status">
+            <select
+              value={form.fitness_status}
+              onChange={(event) =>
+                updateField(
+                  "fitness_status",
+                  event.target.value as AssessmentForm["fitness_status"],
+                )
+              }
+              className="bg-background flex h-9 w-full rounded-md border px-3 py-1.5 text-sm"
+            >
+              <option value="pending">Pending</option>
+              <option value="fit">Fit</option>
+              <option value="unfit">Unfit</option>
+              <option value="further_evaluation">Further Evaluation</option>
+            </select>
+          </Field>
+
+          <Field label="Final assessment remarks">
+            <Textarea
+              className="min-h-[64px] resize-y"
+              value={form.final_remarks}
+              onChange={(event) =>
+                updateField("final_remarks", event.target.value)
+              }
+              placeholder="Enter final clinical assessment remarks"
+            />
+          </Field>
+        </Section>
+      </div>
+
+      <div className="bg-background/95 sticky bottom-0 z-20 flex flex-col gap-2 rounded-lg border p-3 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium">
+            {assessment ? "Existing assessment loaded" : "New assessment"}
+          </p>
+          <p className="text-muted-foreground mt-0.5 text-xs">
+            Verify the clinical details before saving.
+          </p>
+        </div>
+
+        <Button
+          type="submit"
+          disabled={saveMutation.isPending}
+          className="min-w-44"
+        >
+          {saveMutation.isPending ? "Saving..." : "Save Assessment"}
+        </Button>
+      </div>
+    </form>
+  );
+}

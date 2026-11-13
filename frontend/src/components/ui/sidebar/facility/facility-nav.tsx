@@ -100,32 +100,20 @@ function generateFacilityLinks(
       icon: <CareIcon icon="d-hospital" />,
       children: [
         {
+          name: "Surgery & Procedure Master",
+          url: `${baseUrl}/ot/surgery-procedures`,
+        },
+        {
+          name: "Surgery–Anaesthesia Rules",
+          url: `${baseUrl}/ot/surgery-anaesthesia-config`,
+        },
+        {
           name: "OT Setup",
           url: `${baseUrl}/ot/setup`,
         },
         {
-          name: "Surgery Procedure",
-          url: `${baseUrl}/ot/surgery-procedures`,
-        },
-        {
-          name: "Anaesthesia",
-          url: `${baseUrl}/ot/anaesthesia`,
-        },
-        {
-          name: "OT Scheduling",
-          url: `${baseUrl}/ot/scheduling`,
-        },
-        {
-          name: "Pre-OT",
-          url: `${baseUrl}/ot/pre-ot`,
-        },
-        {
-          name: "OT Management",
-          url: `${baseUrl}/ot/management`,
-        },
-        {
-          name: "Post-OT/Recovery",
-          url: `${baseUrl}/ot/management`,
+          name: "OT Waiting List",
+          url: `${baseUrl}/ot/waiting-list`,
         },
       ],
     },

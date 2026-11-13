@@ -52,6 +52,25 @@ class FacilityLocationAccess(AuthorizationHandler):
             location.facility_organization_cache,
         )
 
+    def can_manage_surgery_anaesthesia_config(self, user, facility):
+        """
+        Check whether the user can manage surgery-anaesthesia
+        configurations within the facility.
+        """
+        root_organization = FacilityOrganization.objects.filter(
+            facility=facility,
+            org_type="root",
+        ).first()
+
+        if root_organization is None:
+            return False
+
+        return self.check_permission_in_facility_organization(
+            [FacilityLocationPermissions.can_write_facility_locations.name],
+            user,
+            [root_organization.id],
+        )
+
     def get_accessible_facility_locations(self, qs, user, facility):
         if user.is_superuser:
             return qs

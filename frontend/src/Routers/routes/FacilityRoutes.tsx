@@ -1,8 +1,8 @@
-import { Redirect } from "raviger";
-
 import FacilityUsers from "@/components/Facility/FacilityUsers";
 import ResourceCreate from "@/components/Resource/ResourceForm";
 import MedicationDispenseRedirect from "@/pages/Facility/billing/account/components/MedicationDispenseRedirect";
+import OTPreOperativeList from "@/pages/Facility/ot/OTPreOperativeList";
+import { Redirect } from "raviger";
 
 import BedAvailabilityDashboard from "@/pages/Facility/BedAvailabilityDashboard";
 
@@ -21,6 +21,18 @@ import PaymentReconciliationList from "@/pages/Facility/billing/paymentReconcili
 import PaymentReconciliationShow from "@/pages/Facility/billing/paymentReconciliation/PaymentReconciliationShow";
 import PrintPaymentReconciliation from "@/pages/Facility/billing/paymentReconciliation/PrintPaymentReconciliation";
 import { LocationLayout } from "@/pages/Facility/locations/LocationLayout";
+import OTPatientDashboard from "@/pages/Facility/ot/OTPatientDashboard";
+import OTPreOperativeForm from "@/pages/Facility/ot/OTPreOperativeForm";
+import AnaesthesiaForm from "@/pages/Facility/ot/anaesthesia/AnaesthesiaForm";
+import AnaesthesiaList from "@/pages/Facility/ot/anaesthesia/AnaesthesiaList";
+import OTSetupForm from "@/pages/Facility/ot/otSetup/OTSetupForm";
+import OTSetupList from "@/pages/Facility/ot/otSetup/OTSetupList";
+import OTSchedulingForm from "@/pages/Facility/ot/scheduling/OTSchedulingForm";
+import SurgeryAnaesthesiaConfigForm from "@/pages/Facility/ot/surgeryAnaesthesiaConfig/SurgeryAnaesthesiaConfigForm";
+import SurgeryAnaesthesiaConfigList from "@/pages/Facility/ot/surgeryAnaesthesiaConfig/SurgeryAnaesthesiaConfigList";
+import SurgeryProcedureForm from "@/pages/Facility/ot/surgeryProcedure/SurgeryProcedureForm";
+import SurgeryProcedureList from "@/pages/Facility/ot/surgeryProcedure/SurgeryProcedureList";
+import OTWaitingList from "@/pages/Facility/ot/waitingList/OTWaitingList";
 import { FacilityOverview } from "@/pages/Facility/overview";
 import FacilityServices from "@/pages/Facility/services/FacilityServices";
 import { ServiceLayout } from "@/pages/Facility/services/ServiceLayout";
@@ -28,12 +40,6 @@ import DiagnosticReportPrint from "@/pages/Facility/services/diagnosticReports/D
 import DiagnosticReportView from "@/pages/Facility/services/diagnosticReports/DiagnosticReportView";
 import ServiceRequestShow from "@/pages/Facility/services/serviceRequests/ServiceRequestShow";
 import { SettingsLayout } from "@/pages/Facility/settings/layout";
-import OTSetupList from "@/pages/Facility/ot/otSetup/OTSetupList";
-import OTSetupForm from "@/pages/Facility/ot/otSetup/OTSetupForm";
-import SurgeryProcedureList from "@/pages/Facility/ot/surgeryProcedure/SurgeryProcedureList";
-import SurgeryProcedureForm from "@/pages/Facility/ot/surgeryProcedure/SurgeryProcedureForm";
-import AnaesthesiaList from "@/pages/Facility/ot/anaesthesia/AnaesthesiaList";
-import AnaesthesiaForm from "@/pages/Facility/ot/anaesthesia/AnaesthesiaForm";
 
 const FacilityRoutes: AppRoutes = {
   "/facility": () => <Redirect to="/" />,
@@ -46,10 +52,7 @@ const FacilityRoutes: AppRoutes = {
   "/facility/:facilityId/ot/setup/new": ({ facilityId }) => (
     <OTSetupForm facilityId={facilityId} />
   ),
-  "/facility/:facilityId/ot/setup/:roomId/edit": ({
-    facilityId,
-    roomId,
-  }) => (
+  "/facility/:facilityId/ot/setup/:roomId/edit": ({ facilityId, roomId }) => (
     <OTSetupForm facilityId={facilityId} roomId={roomId} />
   ),
   "/facility/:facilityId/ot/surgery-procedures": ({ facilityId }) => (
@@ -62,11 +65,31 @@ const FacilityRoutes: AppRoutes = {
     facilityId,
     procedureId,
   }) => (
-    <SurgeryProcedureForm
-      facilityId={facilityId}
-      procedureId={procedureId}
-    />
+    <SurgeryProcedureForm facilityId={facilityId} procedureId={procedureId} />
   ),
+  "/facility/:facilityId/ot/waiting-list": ({ facilityId }) => (
+    <OTWaitingList facilityId={facilityId} />
+  ),
+  "/facility/:facilityId/ot/patient/:patientId": ({
+    facilityId,
+    patientId,
+  }) => <OTPatientDashboard facilityId={facilityId} patientId={patientId} />,
+  "/facility/:facilityId/ot/scheduling/new": ({ facilityId }) => (
+    <OTSchedulingForm facilityId={facilityId} />
+  ),
+  "/facility/:facilityId/ot/pre-operative": ({ facilityId }) => (
+    <OTPreOperativeList facilityId={facilityId} />
+  ),
+  "/facility/:facilityId/ot/pre-operative/new": ({ facilityId }) => {
+    const params = new URLSearchParams(window.location.search);
+
+    return (
+      <OTPreOperativeForm
+        facilityId={facilityId}
+        scheduleId={params.get("schedule_id") || undefined}
+      />
+    );
+  },
   "/facility/:facilityId/ot/anaesthesia": ({ facilityId }) => (
     <AnaesthesiaList facilityId={facilityId} />
   ),
@@ -77,10 +100,19 @@ const FacilityRoutes: AppRoutes = {
     facilityId,
     anaesthesiaId,
   }) => (
-    <AnaesthesiaForm
-      facilityId={facilityId}
-      anaesthesiaId={anaesthesiaId}
-    />
+    <AnaesthesiaForm facilityId={facilityId} anaesthesiaId={anaesthesiaId} />
+  ),
+  "/facility/:facilityId/ot/surgery-anaesthesia-config": ({ facilityId }) => (
+    <SurgeryAnaesthesiaConfigList facilityId={facilityId} />
+  ),
+  "/facility/:facilityId/ot/surgery-anaesthesia-config/new": ({
+    facilityId,
+  }) => <SurgeryAnaesthesiaConfigForm facilityId={facilityId} />,
+  "/facility/:facilityId/ot/surgery-anaesthesia-config/:configId/edit": ({
+    facilityId,
+    configId,
+  }) => (
+    <SurgeryAnaesthesiaConfigForm facilityId={facilityId} configId={configId} />
   ),
   "/facility/:facilityId/bed-availability": ({ facilityId }) => (
     <BedAvailabilityDashboard facilityId={facilityId} />

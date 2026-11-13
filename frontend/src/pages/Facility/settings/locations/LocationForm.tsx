@@ -215,12 +215,19 @@ export default function LocationForm({
   });
 
   function onSubmit(values: FormValues) {
+    const parent = values.parent || parentId || undefined;
+
+    const mode: LocationWrite["mode"] =
+      values.form === "bd" || (values.form === "ro" && !!parent)
+        ? "instance"
+        : "kind";
+
     const data: LocationWrite = {
       ...values,
-      mode: values.form === "bd" ? "instance" : "kind",
+      mode,
       description: values.description || "",
       organizations: values.organizations,
-      parent: values.parent || undefined,
+      parent,
     };
 
     if (values.form === "bd" && !isEditMode && values.enableBulkCreation) {
@@ -228,13 +235,14 @@ export default function LocationForm({
         requests: values.bedNames.map((bed) => ({
           url: `/api/v1/facility/${facilityId}/location/`,
           method: "POST",
-          reference_id: parentId ? `Location ${parentId}` : "Location",
+          reference_id: parent ? `Location ${parent}` : "Location",
           body: {
             ...data,
             name: bed.name,
           },
         })),
       };
+
       submitBatch(batchRequest);
       return;
     }

@@ -4,14 +4,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -20,12 +14,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 
 import Loading from "@/components/Common/Loading";
 import Page from "@/components/Common/Page";
 
-import query from "@/Utils/request/query";
 import mutate from "@/Utils/request/mutate";
+import query from "@/Utils/request/query";
 
 import anaesthesiaApi, {
   Anaesthesia as AnaesthesiaRecord,
@@ -51,11 +46,7 @@ export default function Anaesthesia({ facilityId }: Props) {
 
   const queryKey = ["anaesthesia", facilityId];
 
-  const {
-    data,
-    isLoading,
-    isError,
-  } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey,
     queryFn: query(anaesthesiaApi.list, {
       pathParams: { facilityId },
@@ -81,18 +72,14 @@ export default function Anaesthesia({ facilityId }: Props) {
       await refreshList();
     },
     onError: () => {
-      toast.error("Unable to create anaesthesia method. Please check the details.");
+      toast.error(
+        "Unable to create anaesthesia method. Please check the details.",
+      );
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({
-      id,
-      payload,
-    }: {
-      id: string;
-      payload: AnaesthesiaWrite;
-    }) =>
+    mutationFn: ({ id, payload }: { id: string; payload: AnaesthesiaWrite }) =>
       mutate(anaesthesiaApi.update, {
         pathParams: { facilityId, id },
       })(payload),
@@ -287,7 +274,10 @@ export default function Anaesthesia({ facilityId }: Props) {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={isSaving || deleteMutation.isPending}>
+                <Button
+                  type="submit"
+                  disabled={isSaving || deleteMutation.isPending}
+                >
                   {editingId ? (
                     <Pencil className="mr-2 size-4" />
                   ) : (
@@ -318,7 +308,9 @@ export default function Anaesthesia({ facilityId }: Props) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Configured Anaesthesia Methods ({records.length})</CardTitle>
+            <CardTitle>
+              Configured Anaesthesia Methods ({records.length})
+            </CardTitle>
           </CardHeader>
 
           <CardContent>

@@ -1,28 +1,21 @@
-import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { navigate } from "raviger";
 import { ArrowLeft } from "lucide-react";
+import { navigate } from "raviger";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 import Loading from "@/components/Common/Loading";
 import Page from "@/components/Common/Page";
 
-import query from "@/Utils/request/query";
 import mutate from "@/Utils/request/mutate";
+import query from "@/Utils/request/query";
 
-import anaesthesiaApi, {
-  AnaesthesiaWrite,
-} from "@/types/ot/anaesthesiaApi";
+import anaesthesiaApi, { AnaesthesiaWrite } from "@/types/ot/anaesthesiaApi";
 
 interface Props {
   facilityId: string;
@@ -36,10 +29,7 @@ const initialForm: AnaesthesiaWrite = {
   status: "active",
 };
 
-export default function AnaesthesiaForm({
-  facilityId,
-  anaesthesiaId,
-}: Props) {
+export default function AnaesthesiaForm({ facilityId, anaesthesiaId }: Props) {
   const queryClient = useQueryClient();
   const isEdit = Boolean(anaesthesiaId);
 
@@ -47,11 +37,7 @@ export default function AnaesthesiaForm({
 
   const [form, setForm] = useState<AnaesthesiaWrite>(initialForm);
 
-  const {
-    data,
-    isLoading,
-    isError,
-  } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["anaesthesia-record", facilityId, anaesthesiaId],
     queryFn: query(anaesthesiaApi.get, {
       pathParams: {
@@ -116,10 +102,7 @@ export default function AnaesthesiaForm({
     },
   });
 
-  const handleChange = (
-    field: keyof AnaesthesiaWrite,
-    value: string,
-  ) => {
+  const handleChange = (field: keyof AnaesthesiaWrite, value: string) => {
     setForm((previous) => ({
       ...previous,
       [field]: value,
@@ -159,8 +142,8 @@ export default function AnaesthesiaForm({
       <Page title="Anaesthesia Master">
         <div className="space-y-4 p-4">
           <p className="text-red-600">
-            Unable to load anaesthesia details. Please refresh the page or
-            check your permissions.
+            Unable to load anaesthesia details. Please refresh the page or check
+            your permissions.
           </p>
 
           <Button
@@ -254,10 +237,7 @@ export default function AnaesthesiaForm({
               </div>
 
               <div className="space-y-2">
-                <label
-                  htmlFor="description"
-                  className="text-sm font-medium"
-                >
+                <label htmlFor="description" className="text-sm font-medium">
                   Description
                 </label>
 

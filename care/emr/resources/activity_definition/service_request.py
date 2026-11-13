@@ -19,7 +19,7 @@ def convert_ad_to_sr(activity_definition, encounter):
     return ServiceRequest(
         facility=activity_definition.facility,
         title=activity_definition.title,
-        category=activity_definition.category,
+        category=activity_definition.classification,
         status=ServiceRequestStatusChoices.draft.value,
         intent=ServiceRequestIntentChoices.proposal.value,
         priority=ServiceRequestPriorityChoices.routine.value,
