@@ -1,0 +1,566 @@
+import { useQuery } from "@tanstack/react-query";
+import { navigate } from "raviger";
+import { useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+import Loading from "@/components/Common/Loading";
+import Page from "@/components/Common/Page";
+import query from "@/Utils/request/query";
+
+import OTMedicinesIncidentsForm from "@/pages/Facility/ot/OTMedicinesIncidentsForm";
+import OTOperationForm from "@/pages/Facility/ot/OTOperationForm";
+import OTOperationNotesForm from "@/pages/Facility/ot/OTOperationNotesForm";
+import OTPatientTransferForm from "@/pages/Facility/ot/OTPatientTransferForm";
+import OTPostOperativeForm from "@/pages/Facility/ot/OTPostOperativeForm";
+import OTPreOperativeList from "@/pages/Facility/ot/OTPreOperativeList";
+import patientApi from "@/types/emr/patient/patientApi";
+import otOperationApi, {
+  type OTOperationRecord,
+} from "@/types/ot/otOperationApi";
+import otSchedulingApi from "@/types/ot/otSchedulingApi";
+import otWaitingListApi from "@/types/ot/otWaitingListApi";
+
+interface Props {
+  facilityId: string;
+  patientId: string;
+}
+
+const workflowTabs = [
+  { value: "overview", label: "Patient Overview" },
+  { value: "history", label: "Surgery History" },
+  { value: "team", label: "Doctor Team" },
+  { value: "schedule", label: "Operation Date & Time" },
+  { value: "preop", label: "Pre-Operative" },
+  { value: "management", label: "OT Management" },
+  { value: "notes", label: "Operation Notes" },
+  { value: "medicines", label: "Medicines & Incidents" },
+  { value: "postop", label: "Post-Operative" },
+  { value: "transfer", label: "ICU / Inpatient Transfer" },
+];
+
+function Detail({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+}) {
+  return (
+    <div className="min-w-0 space-y-1">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="break-words font-medium">{value || "—"}</p>
+    </div>
+  );
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export default function OTPatientDashboard({ facilityId, patientId }: Props) {
+  const [activeTab, setActiveTab] = useState(() => {
+    const initialTab = new URLSearchParams(window.location.search).get("tab");
+    return initialTab === "preop" ? "preop" : "overview";
+  });
+
+  const params = new URLSearchParams(window.location.search);
+  const serviceRequestId = params.get("service_request_id") || "";
+
+  const patientQuery = useQuery({
+    queryKey: ["ot-patient-dashboard", patientId],
+    queryFn: query(patientApi.get, {
+      pathParams: { id: patientId },
+    }),
+    enabled: !!patientId,
+  });
+
+  const ordersQuery = useQuery({
+    queryKey: ["ot-waiting-list", facilityId],
+    queryFn: query(otWaitingListApi.list, {
+      pathParams: { facilityId },
+    }),
+  });
+
+  const schedulesQuery = useQuery({
+    queryKey: ["ot-schedules", facilityId],
+    queryFn: query(otSchedulingApi.list, {
+      pathParams: { facilityId },
+    }),
+  });
+
+  const operationHistoryQuery = useQuery({
+    queryKey: ["ot-operation-history", facilityId, patientId],
+    queryFn: query(otOperationApi.list, {
+      pathParams: { facilityId },
+    }),
+    enabled: !!facilityId && !!patientId,
+  });
+
+  if (patientQuery.isLoading) {
+    return <Loading />;
+  }
+
+  if (patientQuery.isError || !patientQuery.data) {
+    return (
+      <Page title="OT Patient Dashboard">
+        <div className="p-4">
+          <p className="text-destructive">
+            Unable to load patient details. Please check access and try again.
+          </p>
+
+          <Button
+            className="mt-4"
+            variant="outline"
+            onClick={() => navigate(`/facility/${facilityId}/ot/waiting-list`)}
+          >
+            Back to OT Waiting List
+          </Button>
+        </div>
+      </Page>
+    );
+  }
+
+  const patient = patientQuery.data;
+  const orders = ordersQuery.data?.results ?? [];
+  const schedules = schedulesQuery.data?.results ?? [];
+  const surgeryHistory: OTOperationRecord[] = (
+    operationHistoryQuery.data?.results ?? []
+  ).filter((record) => record.patient_id === patientId);
+
+  const order = orders.find(
+    (item) => item.service_request_id === serviceRequestId,
+  );
+
+  // Prefer the exact Surgery Order match. If there is no order ID in
+  // the URL, fall back to the patient's existing schedule.
+  const schedule = schedules.find((item) =>
+    serviceRequestId
+      ? item.service_request_id === serviceRequestId
+      : item.patient_id === patientId,
+  );
+
+  const procedureName =
+    schedule?.surgery_procedure || order?.surgery_procedure || "—";
+
+  const age =
+    schedule?.age ??
+    order?.age ??
+    (patient.year_of_birth
+      ? new Date().getFullYear() - patient.year_of_birth
+      : null);
+
+  const hasSchedule = !!schedule;
+
+  return (
+    <Page title="OT Patient Dashboard">
+      <div className="mx-auto w-full max-w-[1600px] space-y-5 p-4 lg:p-6">
+        {/* Patient header */}
+        <Card>
+          <CardContent className="p-5 md:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm text-muted-foreground">
+                  Operation Theatre / Patient Details
+                </p>
+
+                <h1 className="mt-1 text-2xl font-semibold">
+                  {patient.name || schedule?.patient_name || "Patient"}
+                </h1>
+
+                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                  <span>
+                    <span className="text-muted-foreground">Patient ID: </span>
+                    {order?.registration_id || patient.id}
+                  </span>
+
+                  <span>
+                    <span className="text-muted-foreground">Age: </span>
+                    {age ?? "—"}
+                  </span>
+
+                  <span>
+                    <span className="text-muted-foreground">Gender: </span>
+                    {patient.gender || schedule?.gender || "—"}
+                  </span>
+
+                  {order?.encounter_id && (
+                    <span>
+                      <span className="text-muted-foreground">
+                        Encounter ID:{" "}
+                      </span>
+                      {order.encounter_id}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`rounded-full px-3 py-1 text-sm font-medium ${
+                    schedule?.status === "scheduled"
+                      ? "bg-blue-100 text-blue-800"
+                      : schedule?.status === "completed"
+                        ? "bg-green-100 text-green-800"
+                        : schedule?.status === "cancelled"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-amber-100 text-amber-800"
+                  }`}
+                >
+                  {schedule?.status
+                    ? schedule.status.charAt(0).toUpperCase() +
+                      schedule.status.slice(1)
+                    : "Not Scheduled"}
+                </span>
+
+                {!schedulesQuery.isLoading &&
+                  !schedulesQuery.isError &&
+                  !hasSchedule &&
+                  serviceRequestId && (
+                    <Button
+                      onClick={() =>
+                        navigate(
+                          `/facility/${facilityId}/ot/scheduling/new?service_request_id=${encodeURIComponent(serviceRequestId)}`,
+                        )
+                      }
+                    >
+                      Schedule Surgery
+                    </Button>
+                  )}
+
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    navigate(`/facility/${facilityId}/ot/waiting-list`)
+                  }
+                >
+                  Back to Waiting List
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4 border-t pt-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Detail label="Surgery / Procedure" value={procedureName} />
+
+              <Detail label="OT Room" value={schedule?.ot_room} />
+
+              <Detail
+                label="Scheduled Start"
+                value={formatDateTime(schedule?.scheduled_start)}
+              />
+
+              <Detail
+                label="Scheduled End"
+                value={formatDateTime(schedule?.scheduled_end)}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Sidebar + details panel */}
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="flex min-w-0 flex-col gap-4"
+        >
+          <TabsList className="flex h-auto w-full flex-row items-center justify-start gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+            {workflowTabs.map((tab) => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className="w-auto shrink-0 justify-center whitespace-nowrap rounded-lg border border-transparent bg-transparent px-4 py-2.5 text-sm font-medium text-slate-600 shadow-none transition-colors hover:bg-slate-50 hover:text-slate-900 data-[state=active]:border-blue-100 data-[state=active]:bg-blue-50 data-[state=active]:font-semibold data-[state=active]:text-blue-700 data-[state=active]:shadow-none"
+              >
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <div className="min-w-0">
+            {/* Patient Overview */}
+            <TabsContent value="overview" className="mt-0">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Patient Overview</CardTitle>
+                </CardHeader>
+
+                <CardContent className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  <Detail label="Patient Name" value={patient.name} />
+                  <Detail
+                    label="Patient / Registration ID"
+                    value={order?.registration_id || patient.id}
+                  />
+                  <Detail label="Age" value={age} />
+                  <Detail label="Gender" value={patient.gender} />
+                  <Detail label="Date of Birth" value={patient.date_of_birth} />
+                  <Detail label="Contact Number" value={patient.phone_number} />
+                  <Detail label="Address" value={patient.address} />
+                  <Detail label="Surgery / Procedure" value={procedureName} />
+                  <Detail label="Ordering Doctor" value={order?.doctor_name} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Surgery History */}
+            <TabsContent value="history" className="mt-0">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Surgery History</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {operationHistoryQuery.isLoading ? (
+                    <p className="text-sm text-muted-foreground">
+                      Loading surgery history...
+                    </p>
+                  ) : operationHistoryQuery.isError ? (
+                    <p className="text-sm text-destructive">
+                      Unable to load surgery history. Please refresh and try
+                      again.
+                    </p>
+                  ) : surgeryHistory.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No surgery history available for this patient.
+                    </p>
+                  ) : (
+                    <div className="space-y-4">
+                      {surgeryHistory.map((record) => (
+                        <div key={record.id} className="rounded-lg border p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <h3 className="font-semibold">
+                                {record.surgery_procedure || "Surgery"}
+                              </h3>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                {record.ot_room || "OT room not specified"}
+                              </p>
+                            </div>
+                            <span className="rounded-full border px-3 py-1 text-xs font-medium">
+                              {record.status.replaceAll("_", " ")}
+                            </span>
+                          </div>
+
+                          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            <Detail
+                              label="Surgery Date"
+                              value={formatDateTime(
+                                record.actual_start || record.scheduled_start,
+                              )}
+                            />
+                            <Detail
+                              label="Actual End"
+                              value={formatDateTime(
+                                record.actual_end || undefined,
+                              )}
+                            />
+                            <Detail
+                              label="Surgeon"
+                              value={record.surgeon_name}
+                            />
+                            <Detail
+                              label="Operative Findings"
+                              value={record.operative_findings}
+                            />
+                            <Detail
+                              label="Complications"
+                              value={record.complications}
+                            />
+                            <Detail
+                              label="Operation Outcome"
+                              value={record.operation_outcome}
+                            />
+                          </div>
+
+                          {record.procedure_details && (
+                            <div className="mt-4">
+                              <Detail
+                                label="Procedure Details"
+                                value={record.procedure_details}
+                              />
+                            </div>
+                          )}
+
+                          {record.intraoperative_notes && (
+                            <div className="mt-4">
+                              <Detail
+                                label="Operation Notes"
+                                value={record.intraoperative_notes}
+                              />
+                            </div>
+                          )}
+
+                          {record.additional_remarks && (
+                            <div className="mt-4">
+                              <Detail
+                                label="Additional Remarks"
+                                value={record.additional_remarks}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Doctor Team */}
+            <TabsContent value="team" className="mt-0">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Doctor Team</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-5 sm:grid-cols-2">
+                  <Detail label="Ordering Doctor" value={order?.doctor_name} />
+                  <Detail
+                    label="Assigned Surgeon"
+                    value={schedule?.surgeon_name}
+                  />
+                  <Detail label="Anaesthesia" value={schedule?.anaesthesia} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Operation Date & Time */}
+            <TabsContent value="schedule" className="mt-0">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Operation Date & Time</CardTitle>
+                </CardHeader>
+
+                <CardContent>
+                  {schedulesQuery.isLoading ? (
+                    <p className="text-sm text-muted-foreground">
+                      Loading saved surgery schedule...
+                    </p>
+                  ) : schedulesQuery.isError ? (
+                    <p className="text-sm text-destructive">
+                      Unable to load the saved schedule. Please refresh and try
+                      again.
+                    </p>
+                  ) : schedule ? (
+                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                      <Detail
+                        label="Surgery / Procedure"
+                        value={schedule.surgery_procedure}
+                      />
+                      <Detail
+                        label="Procedure Code"
+                        value={schedule.procedure_code}
+                      />
+                      <Detail label="Schedule Status" value={schedule.status} />
+                      <Detail label="OT Room" value={schedule.ot_room} />
+                      <Detail
+                        label="Scheduled Start"
+                        value={formatDateTime(schedule.scheduled_start)}
+                      />
+                      <Detail
+                        label="Scheduled End"
+                        value={formatDateTime(schedule.scheduled_end)}
+                      />
+                      <Detail label="Surgeon" value={schedule.surgeon_name} />
+                      <Detail
+                        label="Anaesthesia"
+                        value={schedule.anaesthesia}
+                      />
+                      <Detail label="Schedule ID" value={schedule.id} />
+                      <div className="sm:col-span-2 lg:col-span-3">
+                        <Detail
+                          label="Scheduling Notes"
+                          value={schedule.notes}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        No saved surgery schedule was found for this patient and
+                        Surgery Order.
+                      </p>
+
+                      {serviceRequestId && (
+                        <Button
+                          onClick={() =>
+                            navigate(
+                              `/facility/${facilityId}/ot/scheduling/new?service_request_id=${encodeURIComponent(serviceRequestId)}`,
+                            )
+                          }
+                        >
+                          Schedule Surgery
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Pre-Operative: list and Add button stay inside this tab */}
+            <TabsContent value="preop" className="mt-0">
+              <OTPreOperativeList
+                facilityId={facilityId}
+                scheduleId={schedule?.id}
+                patientId={patientId}
+                serviceRequestId={serviceRequestId || undefined}
+                embedded
+              />
+            </TabsContent>
+
+            {/* OT Management */}
+            <TabsContent value="management" className="mt-0">
+              <OTOperationForm
+                facilityId={facilityId}
+                scheduleId={schedule?.id}
+              />
+            </TabsContent>
+
+            {/* Operation Notes */}
+            <TabsContent value="notes" className="mt-0">
+              <OTOperationNotesForm
+                facilityId={facilityId}
+                scheduleId={schedule?.id}
+              />
+            </TabsContent>
+
+            {/* Medicines & Incidents */}
+            <TabsContent value="medicines" className="mt-0">
+              <OTMedicinesIncidentsForm
+                facilityId={facilityId}
+                scheduleId={schedule?.id}
+              />
+            </TabsContent>
+
+            {/* Post-Operative */}
+            <TabsContent value="postop" className="mt-0">
+              <OTPostOperativeForm
+                facilityId={facilityId}
+                scheduleId={schedule?.id}
+              />
+            </TabsContent>
+
+            {/* ICU / Inpatient Transfer */}
+            <TabsContent value="transfer" className="mt-0">
+              <OTPatientTransferForm
+                facilityId={facilityId}
+                scheduleId={schedule?.id}
+              />
+            </TabsContent>
+          </div>
+        </Tabs>
+      </div>
+    </Page>
+  );
+}

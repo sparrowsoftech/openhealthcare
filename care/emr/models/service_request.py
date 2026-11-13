@@ -36,6 +36,14 @@ class ServiceRequest(EMRBaseModel):
         null=True,
         blank=True,
     )
+    surgery_procedure = models.ForeignKey(
+        "emr.SurgeryProcedure",
+        on_delete=models.PROTECT,
+        default=None,
+        null=True,
+        blank=True,
+        related_name="service_requests",
+    )
     requester = models.ForeignKey(
         "users.User",
         on_delete=models.CASCADE,

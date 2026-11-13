@@ -1,20 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { navigate } from "raviger";
 import { Pencil, Plus, Trash2 } from "lucide-react";
+import { navigate } from "raviger";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import Loading from "@/components/Common/Loading";
 import Page from "@/components/Common/Page";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import query from "@/Utils/request/query";
 import mutate from "@/Utils/request/mutate";
+import query from "@/Utils/request/query";
 
 import otApi, { OTRoomStatus } from "@/types/ot/otApi";
 import surgeryProcedureApi from "@/types/ot/surgeryProcedureApi";
@@ -97,9 +92,7 @@ export default function OTSetupList({ facilityId }: Props) {
       <div className="space-y-6 p-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold">
-              Operation Theatre Setup
-            </h1>
+            <h1 className="text-2xl font-semibold">Operation Theatre Setup</h1>
             <p className="mt-1 text-sm text-gray-500">
               View and manage configured operation theatre rooms.
             </p>
@@ -107,9 +100,7 @@ export default function OTSetupList({ facilityId }: Props) {
 
           <Button
             type="button"
-            onClick={() =>
-              navigate(`/facility/${facilityId}/ot/setup/new`)
-            }
+            onClick={() => navigate(`/facility/${facilityId}/ot/setup/new`)}
           >
             <Plus className="mr-2 h-4 w-4" />
             Add OT Setup
@@ -147,7 +138,10 @@ export default function OTSetupList({ facilityId }: Props) {
                     {rooms.map((room) => (
                       <tr key={room.id} className="border-b">
                         <td className="p-3 font-medium">
-                          {room.location_name || "—"}
+                          <div>{room.location_name || "OT Room"}</div>
+                          <div className="mt-1 text-xs text-gray-500">
+                            OT Room ID: {room.id}
+                          </div>
                         </td>
 
                         <td className="p-3">
@@ -178,9 +172,7 @@ export default function OTSetupList({ facilityId }: Props) {
                           </span>
                         </td>
 
-                        <td className="p-3">
-                          {room.description || "—"}
-                        </td>
+                        <td className="p-3">{room.description || "—"}</td>
 
                         <td className="p-3">
                           <div className="flex gap-2">

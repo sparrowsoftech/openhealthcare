@@ -1,8 +1,12 @@
 from django.db import transaction
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.response import Response
+from rest_framework.viewsets import GenericViewSet
 
 from care.emr.api.viewsets.base import EMRModelViewSet
 from care.emr.models import OTRoom, SurgeryProcedure, Anaesthesia, SurgeryAnaesthesiaConfig
+from care.emr.models.patient import PatientIdentifier
+from care.emr.models.service_request import ServiceRequest
 from care.emr.models.organization import FacilityOrganization
 from care.emr.models.location import FacilityLocation
 from care.emr.resources.ot.spec import (
@@ -258,13 +262,21 @@ class SurgeryProcedureViewSet(EMRModelViewSet):
             )
 
     def authorize_update(self, request_obj, model_instance):
+        facility = self.get_facility_obj()
+
+        if model_instance.facility_id != facility.id:
+            raise PermissionDenied(
+                "This configuration does not belong to the requested facility."
+            )
+
         if not AuthorizationController.call(
-            "can_update_facility_location_obj",
+            "can_manage_surgery_anaesthesia_config",
             self.request.user,
-            model_instance,
+            facility,
         ):
             raise PermissionDenied(
-                "You do not have permission to update surgery procedures."
+                "You do not have permission to update "
+                "surgery anaesthesia configurations."
             )
 
     def authorize_destroy(self, instance):
@@ -447,10 +459,18 @@ class SurgeryAnaesthesiaConfigViewSet(EMRModelViewSet):
             )
 
     def authorize_update(self, request_obj, model_instance):
+        facility = self.get_facility_obj()
+
+        # Do not allow updating a configuration through a different facility URL.
+        if model_instance.facility_id != facility.id:
+            raise PermissionDenied(
+                "This configuration does not belong to the requested facility."
+            )
+
         if not AuthorizationController.call(
-            "can_update_facility_location_obj",
+            "can_manage_surgery_anaesthesia_config",
             self.request.user,
-            model_instance,
+            facility,
         ):
             raise PermissionDenied(
                 "You do not have permission to update "
@@ -478,3 +498,173 @@ class SurgeryAnaesthesiaConfigViewSet(EMRModelViewSet):
                 "modified_date",
             ]
         )
+
+
+class OTWaitingListViewSet(GenericViewSet):
+    """
+    Returns active surgical ServiceRequests for the selected facility.
+    Existing ServiceRequest records remain the source of truth.
+    """
+
+    def list(self, request, *args, **kwargs):
+        facility = get_object_or_404(
+            Facility,
+            external_id=self.kwargs["facility_external_id"],
+        )
+
+        service_requests = (
+            ServiceRequest.objects.filter(
+                facility=facility,
+                category="surgical_procedure",
+                status="active",
+                intent="order",
+                do_not_perform=False,
+                encounter__isnull=False,
+            )
+            .select_related(
+                "patient",
+                "encounter",
+                "requester",
+                "activity_definition",
+                "surgery_procedure",
+            )
+            .order_by("-created_date", "-id")
+        )
+
+        # Apply ServiceRequest-level authorization before pagination.
+        authorized_orders = [
+            order
+            for order in service_requests
+            if AuthorizationController.call(
+                "can_read_service_request",
+                request.user,
+                order,
+            )
+        ]
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(
+            authorized_orders,
+            request,
+            view=self,
+        )
+
+        if page is None:
+            page = authorized_orders
+
+        patient_ids = {order.patient_id for order in page}
+
+        identifiers_by_patient = {}
+        identifiers = (
+            PatientIdentifier.objects.filter(
+                patient_id__in=patient_ids,
+                config__facility=facility,
+                config__status="active",
+            )
+            .select_related("config")
+        )
+
+        for identifier in identifiers:
+            config_data = identifier.config.config or {}
+            identifiers_by_patient.setdefault(
+                identifier.patient_id, []
+            ).append(
+                {
+                    "display": config_data.get("display", ""),
+                    "use": config_data.get("use", ""),
+                    "value": identifier.value,
+                }
+            )
+
+        results = []
+
+        for order in page:
+            patient = order.patient
+            patient_identifiers = identifiers_by_patient.get(patient.id, [])
+
+            # Prefer an identifier explicitly labelled as Registration ID.
+            registration_identifier = next(
+                (
+                    item
+                    for item in patient_identifiers
+                    if (
+                        "registration" in item["display"].lower()
+                        or item["display"].lower()
+                        in {
+                            "reg id",
+                            "reg no",
+                            "reg. no",
+                            "reg code",
+                            "registration no",
+                            "registration number",
+                        }
+                    )
+                ),
+                None,
+            )
+
+            # If no registration-labelled config exists, use the official identifier.
+            if registration_identifier is None:
+                registration_identifier = next(
+                    (
+                        item
+                        for item in patient_identifiers
+                        if item["use"] == "official"
+                    ),
+                    None,
+                )
+
+            requester = order.requester
+            doctor_name = None
+            if requester:
+                doctor_name = requester.get_full_name() or requester.username
+
+            age = None
+            if patient.date_of_birth or patient.year_of_birth:
+                age = patient.age
+
+            results.append(
+                {
+                    "id": str(order.external_id),
+                    "service_request_id": str(order.external_id),
+                    "patient_id": str(patient.external_id),
+                    "registration_id": (
+                        registration_identifier["value"]
+                        if registration_identifier
+                        else None
+                    ),
+                    "patient_name": patient.name,
+                    "age": age,
+                    "gender": patient.gender,
+                    "surgery_procedure": (
+                        order.surgery_procedure.procedure_name
+                        if order.surgery_procedure
+                        else order.title
+                    ),
+                    "procedure_code": (
+                        order.surgery_procedure.procedure_code
+                        if order.surgery_procedure
+                        else None
+                    ),
+                    "doctor_name": doctor_name,
+                    "requester_id": (
+                        str(requester.external_id) if requester else None
+                    ),
+                    "order_date": (
+                        order.created_date.isoformat()
+                        if order.created_date
+                        else None
+                    ),
+                    "priority": order.priority,
+                    "encounter_id": (
+                        str(order.encounter.external_id)
+                        if order.encounter
+                        else None
+                    ),
+                }
+            )
+
+        if paginator.get_limit(request) is not None:
+            return paginator.get_paginated_response(results)
+
+        return Response({"count": len(results), "results": results})

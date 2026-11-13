@@ -1,26 +1,18 @@
-import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { navigate } from "raviger";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import Loading from "@/components/Common/Loading";
 import Page from "@/components/Common/Page";
 import { LocationSearch } from "@/components/Location/LocationSearch";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import query from "@/Utils/request/query";
 import mutate from "@/Utils/request/mutate";
+import query from "@/Utils/request/query";
 
-import otApi, {
-  OTRoomStatus,
-  OTRoomWrite,
-} from "@/types/ot/otApi";
+import otApi, { OTRoomStatus, OTRoomWrite } from "@/types/ot/otApi";
 import surgeryProcedureApi from "@/types/ot/surgeryProcedureApi";
 
 import { LocationRead } from "@/types/location/location";
@@ -49,8 +41,9 @@ export default function OTSetupForm({ facilityId, roomId }: Props) {
   const queryClient = useQueryClient();
 
   const [form, setForm] = useState<OTRoomWrite>(initialForm);
-  const [selectedLocation, setSelectedLocation] =
-    useState<LocationRead | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<LocationRead | null>(
+    null,
+  );
   const [equipmentText, setEquipmentText] = useState("");
   const [proceduresDropdownOpen, setProceduresDropdownOpen] = useState(false);
   const [procedureSearch, setProcedureSearch] = useState("");
@@ -68,7 +61,7 @@ export default function OTSetupForm({ facilityId, roomId }: Props) {
 
   const proceduresQuery = useQuery({
     queryKey: ["surgery-procedures", facilityId],
-    queryFn: query(surgeryProcedureApi.list, {
+    queryFn: query.paginated(surgeryProcedureApi.list, {
       pathParams: { facilityId },
     }),
   });
@@ -174,15 +167,13 @@ export default function OTSetupForm({ facilityId, roomId }: Props) {
     return (
       <Page title="OT Setup">
         <div className="p-4 text-red-600">
-          Unable to load this OT Room. Please return to the OT Setup list
-          and try again.
+          Unable to load this OT Room. Please return to the OT Setup list and
+          try again.
           <div className="mt-4">
             <Button
               type="button"
               variant="outline"
-              onClick={() =>
-                navigate(`/facility/${facilityId}/ot/setup`)
-              }
+              onClick={() => navigate(`/facility/${facilityId}/ot/setup`)}
             >
               Back to OT Setup
             </Button>
@@ -285,9 +276,7 @@ export default function OTSetupForm({ facilityId, roomId }: Props) {
                     className="w-full rounded-md border p-2"
                     placeholder="OT Table, Monitor, Ventilator"
                     value={equipmentText}
-                    onChange={(event) =>
-                      setEquipmentText(event.target.value)
-                    }
+                    onChange={(event) => setEquipmentText(event.target.value)}
                   />
 
                   <p className="mt-1 text-xs text-gray-500">
@@ -298,9 +287,7 @@ export default function OTSetupForm({ facilityId, roomId }: Props) {
 
               <div className="space-y-3 rounded-md border p-4">
                 <div>
-                  <h3 className="text-sm font-semibold">
-                    Surgery / Procedure
-                  </h3>
+                  <h3 className="text-sm font-semibold">Surgery / Procedure</h3>
                   <p className="mt-1 text-xs text-gray-500">
                     Select one procedure that can be performed in this OT room.
                   </p>
@@ -312,11 +299,13 @@ export default function OTSetupForm({ facilityId, roomId }: Props) {
                   </p>
                 ) : proceduresQuery.isError ? (
                   <p className="text-sm text-red-600">
-                    Unable to load surgery procedures. Please refresh and try again.
+                    Unable to load surgery procedures. Please refresh and try
+                    again.
                   </p>
                 ) : activeProcedures.length === 0 ? (
                   <p className="text-sm text-gray-500">
-                    No active procedures found. Add active procedures in Surgery / Procedure Master first.
+                    No active procedures found. Add active procedures in Surgery
+                    / Procedure Master first.
                   </p>
                 ) : (
                   <div className="relative">
@@ -378,9 +367,12 @@ export default function OTSetupForm({ facilityId, roomId }: Props) {
                                     selected ? "bg-gray-50 font-medium" : ""
                                   }`}
                                 >
-                                  {procedure.procedure_name} ({procedure.procedure_code})
+                                  {procedure.procedure_name} (
+                                  {procedure.procedure_code})
                                   {selected && (
-                                    <span className="float-right text-gray-500">✓</span>
+                                    <span className="float-right text-gray-500">
+                                      ✓
+                                    </span>
                                   )}
                                 </button>
                               );
@@ -436,9 +428,7 @@ export default function OTSetupForm({ facilityId, roomId }: Props) {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() =>
-                    navigate(`/facility/${facilityId}/ot/setup`)
-                  }
+                  onClick={() => navigate(`/facility/${facilityId}/ot/setup`)}
                 >
                   Cancel
                 </Button>

@@ -1,0 +1,462 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState, type FormEvent } from "react";
+import { toast } from "sonner";
+
+import UserSelector from "@/components/Common/UserSelector";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+
+import mutate from "@/Utils/request/mutate";
+import query from "@/Utils/request/query";
+import { formatName } from "@/Utils/utils";
+
+import type { UserReadMinimal } from "@/types/user/user";
+
+import otOperationApi, {
+  type OTOperationInput,
+  type OTOperationRecord,
+  type OTOperationStatus,
+} from "@/types/ot/otOperationApi";
+
+interface Props {
+  facilityId: string;
+  scheduleId?: string;
+}
+
+const initialForm = {
+  intraoperative_notes: "",
+  incident_report: "",
+};
+
+type OTTeamRole = "Doctor" | "Assistant" | "Nurse";
+
+function formatTeamMember(role: OTTeamRole, user: UserReadMinimal) {
+  return `${role}: ${formatName(user)} [ID: ${user.id}]`;
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "Not recorded";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0 space-y-2">
+      <label className="block text-sm font-medium">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+export default function OTOperationForm({ facilityId, scheduleId }: Props) {
+  const queryClient = useQueryClient();
+
+  const [form, setForm] = useState(initialForm);
+  const [teamMembers, setTeamMembers] = useState<string[]>([]);
+  const [selectedStaff, setSelectedStaff] = useState<
+    UserReadMinimal | undefined
+  >();
+  const [teamRole, setTeamRole] = useState<OTTeamRole>("Doctor");
+
+  const operationQuery = useQuery({
+    queryKey: ["ot-operation", facilityId, scheduleId],
+    queryFn: query(otOperationApi.list, {
+      pathParams: { facilityId },
+    }),
+    enabled: !!scheduleId,
+  });
+
+  const operation = operationQuery.data?.results?.find(
+    (item: OTOperationRecord) => item.schedule_id === scheduleId,
+  );
+
+  useEffect(() => {
+    setTeamMembers(operation?.team_attendance ?? []);
+    setForm({
+      intraoperative_notes: operation?.intraoperative_notes ?? "",
+      incident_report: operation?.incident_report ?? "",
+    });
+  }, [operation]);
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: OTOperationInput) =>
+      mutate(otOperationApi.save, {
+        pathParams: { facilityId },
+      })(payload),
+
+    onSuccess: async () => {
+      toast.success("OT operation record saved successfully.");
+
+      await queryClient.invalidateQueries({
+        queryKey: ["ot-operation", facilityId],
+      });
+
+      await queryClient.invalidateQueries({
+        queryKey: ["ot-schedules", facilityId],
+      });
+
+      await operationQuery.refetch();
+    },
+
+    onError: (error: unknown) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to save the OT operation record.",
+      );
+    },
+  });
+
+  const saveRecord = (status: OTOperationStatus) => {
+    if (!scheduleId) {
+      toast.error("Please schedule the surgery first.");
+      return;
+    }
+
+    const payload: OTOperationInput = {
+      schedule_id: scheduleId,
+      status,
+      team_attendance: teamMembers,
+      intraoperative_notes: form.intraoperative_notes,
+      incident_report: form.incident_report,
+      procedure_details: operation?.procedure_details ?? "",
+      operative_findings: operation?.operative_findings ?? "",
+      surgeon_name: operation?.surgeon_name ?? "",
+      complications: operation?.complications ?? "",
+      operation_outcome: operation?.operation_outcome ?? "",
+      additional_remarks: operation?.additional_remarks ?? "",
+      anaesthesia: operation?.anaesthesia ?? "",
+      preoperative_medication: operation?.preoperative_medication ?? "",
+      incision: operation?.incision ?? "",
+      surgery_notes: operation?.surgery_notes ?? "",
+      pathology: operation?.pathology ?? "",
+      closure: operation?.closure ?? "",
+      drainage_tube: operation?.drainage_tube ?? "",
+      ryles_tube: operation?.ryles_tube ?? "",
+      biopsy: operation?.biopsy ?? "",
+      postoperative_advice: operation?.postoperative_advice ?? "",
+    };
+
+    saveMutation.mutate(payload);
+  };
+
+  const handleSave = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    saveRecord(operation?.status ?? "not_started");
+  };
+
+  if (!scheduleId) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>OT Management</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Please schedule the surgery before starting OT management.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (operationQuery.isLoading) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Loading OT operation record...
+      </p>
+    );
+  }
+
+  if (operationQuery.isError) {
+    return (
+      <Card>
+        <CardContent className="space-y-3 p-5">
+          <p className="text-destructive">
+            Unable to load the OT operation record.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void operationQuery.refetch()}
+          >
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const status = operation?.status ?? "not_started";
+  const isSaving = saveMutation.isPending;
+  const isFinal = status === "completed" || status === "cancelled";
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>OT Management</CardTitle>
+        </CardHeader>
+
+        <CardContent className="space-y-5">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <p className="text-sm text-muted-foreground">Operation Status</p>
+              <p className="mt-1 font-semibold capitalize">
+                {status.replaceAll("_", " ")}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-muted-foreground">Actual Start Time</p>
+              <p className="mt-1 font-medium">
+                {formatDateTime(operation?.actual_start)}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-muted-foreground">Actual End Time</p>
+              <p className="mt-1 font-medium">
+                {formatDateTime(operation?.actual_end)}
+              </p>
+            </div>
+          </div>
+
+          {status === "not_started" && (
+            <div className="rounded-md border p-4">
+              <p className="text-sm text-muted-foreground">
+                Complete the pre-operative assessment, obtain patient consent,
+                verify patient identity, procedure and surgical site, and mark
+                the patient fit before starting the operation.
+              </p>
+
+              <Button
+                type="button"
+                className="mt-4"
+                disabled={isSaving}
+                onClick={() => saveRecord("in_progress")}
+              >
+                {isSaving ? "Processing..." : "Start Operation"}
+              </Button>
+            </div>
+          )}
+
+          {status === "in_progress" && (
+            <div className="rounded-md border p-4">
+              <p className="text-sm text-muted-foreground">
+                The operation is in progress. Save the intraoperative details
+                below before completing the operation.
+              </p>
+
+              <Button
+                type="button"
+                variant="destructive"
+                className="mt-4"
+                disabled={isSaving}
+                onClick={() => saveRecord("completed")}
+              >
+                {isSaving ? "Processing..." : "Complete Operation"}
+              </Button>
+            </div>
+          )}
+
+          {status === "completed" && (
+            <p className="rounded-md border p-4 text-sm">
+              This operation is completed. You can still update its notes and
+              attendance details.
+            </p>
+          )}
+
+          {status === "cancelled" && (
+            <p className="rounded-md border p-4 text-sm text-destructive">
+              This operation is cancelled and cannot be restarted from this
+              screen.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Team Attendance & Intraoperative Report</CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          <form onSubmit={handleSave} className="space-y-5">
+            <Field label="Team Member Type">
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={teamRole}
+                onChange={(event) =>
+                  setTeamRole(event.target.value as OTTeamRole)
+                }
+                disabled={isFinal}
+              >
+                <option value="Doctor">Doctor</option>
+                <option value="Assistant">Assistant</option>
+                <option value="Nurse">Nurse</option>
+              </select>
+            </Field>
+
+            <Field label="Select Staff">
+              <UserSelector
+                facilityId={facilityId}
+                selected={selectedStaff}
+                onChange={setSelectedStaff}
+                placeholder={`Select ${teamRole}`}
+                onClear={() => setSelectedStaff(undefined)}
+                disabled={isFinal}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isFinal || !selectedStaff}
+                onClick={() => {
+                  if (!selectedStaff) return;
+
+                  const entry = formatTeamMember(teamRole, selectedStaff);
+
+                  if (teamMembers.some((member) => member === entry)) {
+                    toast.error("This team member has already been added.");
+                    return;
+                  }
+
+                  setTeamMembers((previous) => [...previous, entry]);
+                  setSelectedStaff(undefined);
+                }}
+              >
+                Add Team Member
+              </Button>
+            </Field>
+
+            <Field label="OT Team Attendance">
+              {teamMembers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No team members added yet.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {teamMembers.map((member, index) => (
+                    <div
+                      key={`${member}-${index}`}
+                      className="flex items-center justify-between gap-3 rounded-md border p-3"
+                    >
+                      <span className="break-all text-sm">{member}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isFinal}
+                        onClick={() =>
+                          setTeamMembers((previous) =>
+                            previous.filter(
+                              (_, itemIndex) => itemIndex !== index,
+                            ),
+                          )
+                        }
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Field>
+
+            <Field label="Intraoperative Notes">
+              <Textarea
+                value={form.intraoperative_notes}
+                onChange={(event) =>
+                  setForm((previous) => ({
+                    ...previous,
+                    intraoperative_notes: event.target.value,
+                  }))
+                }
+                placeholder="Enter operation findings, procedure details and observations..."
+                rows={6}
+                disabled={isFinal}
+              />
+            </Field>
+
+            <Field label="Incident Report">
+              <Textarea
+                value={form.incident_report}
+                onChange={(event) =>
+                  setForm((previous) => ({
+                    ...previous,
+                    incident_report: event.target.value,
+                  }))
+                }
+                placeholder="Record incidents or complications. If none, enter 'None'."
+                rows={4}
+                disabled={isFinal}
+              />
+            </Field>
+
+            {!isFinal && (
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? "Saving..." : "Save OT Record"}
+              </Button>
+            )}
+
+            {isFinal && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSaving}
+                onClick={() => {
+                  const payload: OTOperationInput = {
+                    schedule_id: scheduleId,
+                    status,
+                    team_attendance: teamMembers,
+                    intraoperative_notes: form.intraoperative_notes,
+                    incident_report: form.incident_report,
+                    procedure_details: operation?.procedure_details ?? "",
+                    operative_findings: operation?.operative_findings ?? "",
+                    surgeon_name: operation?.surgeon_name ?? "",
+                    complications: operation?.complications ?? "",
+                    operation_outcome: operation?.operation_outcome ?? "",
+                    additional_remarks: operation?.additional_remarks ?? "",
+                    anaesthesia: operation?.anaesthesia ?? "",
+                    preoperative_medication:
+                      operation?.preoperative_medication ?? "",
+                    incision: operation?.incision ?? "",
+                    surgery_notes: operation?.surgery_notes ?? "",
+                    pathology: operation?.pathology ?? "",
+                    closure: operation?.closure ?? "",
+                    drainage_tube: operation?.drainage_tube ?? "",
+                    ryles_tube: operation?.ryles_tube ?? "",
+                    biopsy: operation?.biopsy ?? "",
+                    postoperative_advice: operation?.postoperative_advice ?? "",
+                  };
+
+                  saveMutation.mutate(payload);
+                }}
+              >
+                {isSaving ? "Saving..." : "Update OT Record"}
+              </Button>
+            )}
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

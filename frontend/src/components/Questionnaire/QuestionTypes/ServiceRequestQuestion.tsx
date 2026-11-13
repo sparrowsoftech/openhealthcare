@@ -61,6 +61,7 @@ import { Decimal } from "decimal.js";
 
 import { AddToTemplateDialog } from "@/components/Questionnaire/AddToTemplateDialog";
 import { filterStructuredQuestionnaireSlugs } from "@/components/Questionnaire/data/StructuredFormData";
+import SurgeryOrderPanel from "./SurgeryOrderPanel";
 
 export function buildServiceRequestForTemplate(
   serviceRequest: ServiceRequestApplyActivityDefinitionSpec,
@@ -1058,6 +1059,11 @@ export function ServiceRequestQuestion({
           />
         )}
       </div>
+      <SurgeryOrderPanel
+        facilityId={facilityId}
+        encounterId={encounterId}
+        disabled={disabled}
+      />
     </div>
   );
 }

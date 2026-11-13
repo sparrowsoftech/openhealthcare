@@ -182,3 +182,407 @@ class SurgeryAnaesthesiaConfig(EMRBaseModel):
             f"{self.surgery_procedure.procedure_name} - "
             f"{self.anaesthesia_format}"
         )
+
+
+class SurgerySchedule(EMRBaseModel):
+    facility = models.ForeignKey(
+        "facility.Facility",
+        on_delete=models.PROTECT,
+        related_name="surgery_schedules",
+    )
+
+    service_request = models.ForeignKey(
+        "emr.ServiceRequest",
+        on_delete=models.PROTECT,
+        related_name="ot_schedules",
+    )
+
+    ot_room = models.ForeignKey(
+        "emr.OTRoom",
+        on_delete=models.PROTECT,
+        related_name="surgery_schedules",
+    )
+
+    anaesthesia_config = models.ForeignKey(
+        "emr.SurgeryAnaesthesiaConfig",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="surgery_schedules",
+    )
+
+    surgeon = models.ForeignKey(
+        "users.User",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="ot_surgery_schedules",
+    )
+
+    scheduled_start = models.DateTimeField()
+    scheduled_end = models.DateTimeField()
+
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ("scheduled", "Scheduled"),
+            ("completed", "Completed"),
+            ("cancelled", "Cancelled"),
+        ],
+        default="scheduled",
+    )
+
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "emr_surgery_schedule"
+        ordering = ["scheduled_start"]
+
+    def __str__(self):
+        return (
+            f"{self.service_request.title} - "
+            f"{self.scheduled_start}"
+        )
+
+
+class OTPreOperativeAssessment(EMRBaseModel):
+    """
+    Pre-operative assessment linked to one scheduled surgery.
+    Clinical fitness must be explicitly determined by authorized staff.
+    """
+
+    facility = models.ForeignKey(
+        "facility.Facility",
+        on_delete=models.PROTECT,
+        related_name="ot_preoperative_assessments",
+    )
+
+    surgery_schedule = models.OneToOneField(
+        "emr.SurgerySchedule",
+        on_delete=models.PROTECT,
+        related_name="preoperative_assessment",
+    )
+
+    anaesthesia_config = models.ForeignKey(
+        "emr.SurgeryAnaesthesiaConfig",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="preoperative_assessments",
+    )
+
+    patient_identity_verified = models.BooleanField(default=False)
+    procedure_verified = models.BooleanField(default=False)
+    surgical_site_verified = models.BooleanField(default=False)
+
+    investigations_reviewed = models.BooleanField(default=False)
+    investigation_remarks = models.TextField(blank=True, default="")
+
+    consent_status = models.CharField(
+        max_length=20,
+        choices=[
+            ("pending", "Pending"),
+            ("obtained", "Obtained"),
+            ("declined", "Declined"),
+        ],
+        default="pending",
+    )
+    consent_remarks = models.TextField(blank=True, default="")
+
+    vitals = models.JSONField(default=dict, blank=True)
+
+    day_before_surgery = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Pre-operative checklist completed on the day before surgery.",
+    )
+
+    day_of_surgery = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Pre-operative checklist completed on the day of surgery.",
+    )
+
+    allergies = models.TextField(blank=True, default="")
+    clinical_remarks = models.TextField(blank=True, default="")
+
+    anaesthesia_status = models.CharField(
+        max_length=20,
+        choices=[
+            ("pending", "Pending"),
+            ("assessed", "Assessed"),
+            ("needs_review", "Needs Review"),
+        ],
+        default="pending",
+    )
+    anaesthesia_remarks = models.TextField(blank=True, default="")
+
+    fitness_status = models.CharField(
+        max_length=30,
+        choices=[
+            ("pending", "Pending"),
+            ("fit", "Fit"),
+            ("unfit", "Unfit"),
+            ("further_evaluation", "Further Evaluation Required"),
+        ],
+        default="pending",
+    )
+
+    final_remarks = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "emr_ot_preoperative_assessment"
+
+    def __str__(self):
+        return f"Pre-operative assessment: {self.surgery_schedule}"
+
+
+class OTOperationRecord(EMRBaseModel):
+    """
+    Actual operation details linked to a scheduled surgery.
+    """
+
+    facility = models.ForeignKey(
+        "facility.Facility",
+        on_delete=models.PROTECT,
+        related_name="ot_operation_records",
+    )
+
+    surgery_schedule = models.OneToOneField(
+        "emr.SurgerySchedule",
+        on_delete=models.PROTECT,
+        related_name="operation_record",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ("not_started", "Not Started"),
+            ("in_progress", "In Progress"),
+            ("completed", "Completed"),
+            ("cancelled", "Cancelled"),
+        ],
+        default="not_started",
+    )
+
+    actual_start = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    actual_end = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    team_attendance = models.JSONField(
+        default=list,
+        blank=True,
+    )
+
+    intraoperative_notes = models.TextField(
+        blank=True,
+        default="",
+    )
+
+    incident_report = models.TextField(
+        blank=True,
+        default="",
+    )
+
+    procedure_details = models.TextField(blank=True, default="")
+    operative_findings = models.TextField(blank=True, default="")
+    surgeon_name = models.CharField(max_length=255, blank=True, default="")
+    complications = models.TextField(blank=True, default="")
+    operation_outcome = models.TextField(blank=True, default="")
+    additional_remarks = models.TextField(blank=True, default="")
+
+    # Legacy Doctor folder: Operation Notes fields
+    anaesthesia = models.CharField(max_length=255, blank=True, default="")
+    preoperative_medication = models.TextField(blank=True, default="")
+    incision = models.TextField(blank=True, default="")
+    surgery_notes = models.TextField(blank=True, default="")
+    pathology = models.TextField(blank=True, default="")
+    closure = models.TextField(blank=True, default="")
+    drainage_tube = models.CharField(max_length=100, blank=True, default="")
+    ryles_tube = models.CharField(max_length=100, blank=True, default="")
+    biopsy = models.TextField(blank=True, default="")
+    postoperative_advice = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "emr_ot_operation_record"
+
+    def __str__(self):
+        return f"OT Operation: {self.surgery_schedule}"
+
+
+class OTMedicineUsage(EMRBaseModel):
+    """Medicine or consumable used during a scheduled operation."""
+
+    facility = models.ForeignKey(
+        "facility.Facility",
+        on_delete=models.PROTECT,
+        related_name="ot_medicine_usages",
+    )
+    surgery_schedule = models.ForeignKey(
+        "emr.SurgerySchedule",
+        on_delete=models.PROTECT,
+        related_name="medicine_usages",
+    )
+    item_name = models.CharField(max_length=255)
+    dose = models.CharField(max_length=100, blank=True, default="")
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    unit = models.CharField(max_length=50)
+    batch_number = models.CharField(max_length=100, blank=True, default="")
+    used_at = models.DateTimeField(null=True, blank=True)
+    remarks = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "emr_ot_medicine_usage"
+        ordering = ["-created_date"]
+
+    def __str__(self):
+        return f"{self.item_name} - {self.surgery_schedule}"
+
+
+class OTIncidentRecord(EMRBaseModel):
+    """Incident documented against a scheduled operation."""
+
+    facility = models.ForeignKey(
+        "facility.Facility",
+        on_delete=models.PROTECT,
+        related_name="ot_incident_records",
+    )
+    surgery_schedule = models.ForeignKey(
+        "emr.SurgerySchedule",
+        on_delete=models.PROTECT,
+        related_name="incident_records",
+    )
+    incident_type = models.CharField(max_length=100)
+    occurred_at = models.DateTimeField(null=True, blank=True)
+    description = models.TextField()
+    immediate_action = models.TextField(blank=True, default="")
+    reported_by = models.CharField(max_length=255, blank=True, default="")
+    follow_up = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "emr_ot_incident_record"
+        ordering = ["-created_date"]
+
+    def __str__(self):
+        return f"{self.incident_type} - {self.surgery_schedule}"
+
+
+class OTPostOperativeRecovery(EMRBaseModel):
+    """Post-operative recovery observations for a scheduled surgery."""
+
+    facility = models.ForeignKey(
+        "facility.Facility",
+        on_delete=models.PROTECT,
+        related_name="ot_postoperative_recoveries",
+    )
+
+    surgery_schedule = models.ForeignKey(
+        "emr.SurgerySchedule",
+        on_delete=models.PROTECT,
+        related_name="postoperative_recoveries",
+    )
+
+    assessed_at = models.DateTimeField(null=True, blank=True)
+
+    recovery_status = models.CharField(
+        max_length=30,
+        choices=[
+            ("recovering", "Recovering"),
+            ("stable", "Stable"),
+            ("needs_attention", "Needs Attention"),
+            ("transferred", "Transferred"),
+        ],
+        default="recovering",
+    )
+
+    consciousness_level = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+    )
+
+    vitals = models.JSONField(default=dict, blank=True)
+
+    pain_score = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+    )
+
+    oxygen_support = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+    )
+
+    recovery_notes = models.TextField(blank=True, default="")
+    doctor_instructions = models.TextField(blank=True, default="")
+    recorded_by = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        db_table = "emr_ot_postoperative_recovery"
+        ordering = ["-created_date"]
+
+    def __str__(self):
+        return f"Post-operative recovery: {self.surgery_schedule}"
+
+
+class OTPatientTransfer(EMRBaseModel):
+    """ICU, inpatient ward or recovery-room transfer record."""
+
+    facility = models.ForeignKey(
+        "facility.Facility",
+        on_delete=models.PROTECT,
+        related_name="ot_patient_transfers",
+    )
+
+    surgery_schedule = models.ForeignKey(
+        "emr.SurgerySchedule",
+        on_delete=models.PROTECT,
+        related_name="patient_transfers",
+    )
+
+    destination_type = models.CharField(
+        max_length=30,
+        choices=[
+            ("icu", "ICU"),
+            ("inpatient_ward", "Inpatient Ward"),
+            ("recovery_room", "Recovery Room"),
+            ("other", "Other"),
+        ],
+    )
+
+    destination_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+    )
+
+    transfer_status = models.CharField(
+        max_length=20,
+        choices=[
+            ("planned", "Planned"),
+            ("transferred", "Transferred"),
+            ("cancelled", "Cancelled"),
+        ],
+        default="planned",
+    )
+
+    transfer_time = models.DateTimeField(null=True, blank=True)
+
+    patient_condition = models.TextField(blank=True, default="")
+    receiving_staff = models.CharField(max_length=255, blank=True, default="")
+    handover_notes = models.TextField(blank=True, default="")
+    recorded_by = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        db_table = "emr_ot_patient_transfer"
+        ordering = ["-created_date"]
+
+    def __str__(self):
+        return f"OT patient transfer: {self.surgery_schedule}"

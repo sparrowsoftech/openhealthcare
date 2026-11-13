@@ -119,6 +119,16 @@ from care.emr.api.viewsets.ot import (
     SurgeryProcedureViewSet,
     AnaesthesiaViewSet,
     SurgeryAnaesthesiaConfigViewSet,
+    OTWaitingListViewSet,
+)
+from care.emr.api.viewsets.surgery_order import SurgeryOrderViewSet
+from care.emr.api.viewsets.ot_schedule import OTSchedulingViewSet
+from care.emr.api.viewsets.ot_preoperative import OTPreOperativeAssessmentViewSet
+from care.emr.api.viewsets.ot_operation import OTOperationViewSet
+from care.emr.api.viewsets.ot_medicines_incidents import OTMedicinesIncidentsViewSet
+from care.emr.api.viewsets.ot_postoperative import (
+    OTPostOperativeViewSet,
+    OTPatientTransferViewSet,
 )
 
 router = DefaultRouter() if settings.DEBUG else SimpleRouter()
@@ -312,6 +322,56 @@ facility_nested_router.register(
     r"surgery_anaesthesia_config",
     SurgeryAnaesthesiaConfigViewSet,
     basename="surgery-anaesthesia-config",
+)
+
+facility_nested_router.register(
+    r"surgery_order",
+    SurgeryOrderViewSet,
+    basename="surgery-order",
+)
+
+facility_nested_router.register(
+    r"ot_waiting_list",
+    OTWaitingListViewSet,
+    basename="ot-waiting-list",
+)
+
+facility_nested_router.register(
+    r"ot_schedule",
+    OTSchedulingViewSet,
+    basename="ot-schedule",
+)
+
+facility_nested_router.register(
+    r"ot_preoperative",
+    OTPreOperativeAssessmentViewSet,
+    basename="ot-preoperative",
+)
+
+facility_nested_router.register(
+    r"ot_operation",
+    OTOperationViewSet,
+    basename="ot-operation",
+)
+
+
+facility_nested_router.register(
+    r"ot_medicines_incidents",
+    OTMedicinesIncidentsViewSet,
+    basename="ot-medicines-incidents",
+)
+
+
+facility_nested_router.register(
+    r"ot_postoperative",
+    OTPostOperativeViewSet,
+    basename="ot-postoperative",
+)
+
+facility_nested_router.register(
+    r"ot_patient_transfer",
+    OTPatientTransferViewSet,
+    basename="ot-patient-transfer",
 )
 
 facility_nested_router.register(

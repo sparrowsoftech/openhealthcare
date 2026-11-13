@@ -214,45 +214,45 @@ export default function LocationForm({
     },
   });
 
-function onSubmit(values: FormValues) {
-  const parent = values.parent || parentId || undefined;
+  function onSubmit(values: FormValues) {
+    const parent = values.parent || parentId || undefined;
 
-  const mode: LocationWrite["mode"] =
-    values.form === "bd" || (values.form === "ro" && !!parent)
-      ? "instance"
-      : "kind";
+    const mode: LocationWrite["mode"] =
+      values.form === "bd" || (values.form === "ro" && !!parent)
+        ? "instance"
+        : "kind";
 
-  const data: LocationWrite = {
-    ...values,
-    mode,
-    description: values.description || "",
-    organizations: values.organizations,
-    parent,
-  };
-
-  if (values.form === "bd" && !isEditMode && values.enableBulkCreation) {
-    const batchRequest: BatchRequestBody = {
-      requests: values.bedNames.map((bed) => ({
-        url: `/api/v1/facility/${facilityId}/location/`,
-        method: "POST",
-        reference_id: parent ? `Location ${parent}` : "Location",
-        body: {
-          ...data,
-          name: bed.name,
-        },
-      })),
+    const data: LocationWrite = {
+      ...values,
+      mode,
+      description: values.description || "",
+      organizations: values.organizations,
+      parent,
     };
 
-    submitBatch(batchRequest);
-    return;
-  }
+    if (values.form === "bd" && !isEditMode && values.enableBulkCreation) {
+      const batchRequest: BatchRequestBody = {
+        requests: values.bedNames.map((bed) => ({
+          url: `/api/v1/facility/${facilityId}/location/`,
+          method: "POST",
+          reference_id: parent ? `Location ${parent}` : "Location",
+          body: {
+            ...data,
+            name: bed.name,
+          },
+        })),
+      };
 
-  if (location?.id) {
-    data.id = location.id;
-  }
+      submitBatch(batchRequest);
+      return;
+    }
 
-  submitForm(data);
-}
+    if (location?.id) {
+      data.id = location.id;
+    }
+
+    submitForm(data);
+  }
 
   const statusOptions: { value: Status; label: string }[] = [
     { value: "active", label: "Active" },

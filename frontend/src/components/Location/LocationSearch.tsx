@@ -101,7 +101,6 @@ export function LocationSearch({
     </Command>
   );
 
-
   if (isMobile) {
     return (
       <div className="w-full">

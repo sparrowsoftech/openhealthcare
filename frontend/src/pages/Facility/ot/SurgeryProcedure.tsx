@@ -4,14 +4,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -20,12 +14,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 
 import Loading from "@/components/Common/Loading";
 import Page from "@/components/Common/Page";
 
-import query from "@/Utils/request/query";
 import mutate from "@/Utils/request/mutate";
+import query from "@/Utils/request/query";
 
 import FacilityOrganizationSelector from "@/pages/Facility/settings/organizations/components/FacilityOrganizationSelector";
 
@@ -194,9 +189,7 @@ export default function SurgeryProcedure({ facilityId }: Props) {
     <Page title="Surgery / Procedure Master">
       <div className="space-y-6 p-4">
         <div>
-          <h1 className="text-2xl font-semibold">
-            Surgery / Procedure Master
-          </h1>
+          <h1 className="text-2xl font-semibold">Surgery / Procedure Master</h1>
           <p className="mt-1 text-sm text-gray-500">
             Configure surgical procedures, departments and expected duration.
           </p>
@@ -317,7 +310,8 @@ export default function SurgeryProcedure({ facilityId }: Props) {
                     onChange={(event) =>
                       setForm((previous) => ({
                         ...previous,
-                        status: event.target.value as SurgeryProcedureWrite["status"],
+                        status: event.target
+                          .value as SurgeryProcedureWrite["status"],
                       }))
                     }
                   >
@@ -419,9 +413,7 @@ export default function SurgeryProcedure({ facilityId }: Props) {
                           )}
                         </TableCell>
                         <TableCell>{record.procedure_code}</TableCell>
-                        <TableCell>
-                          {record.department_name || "—"}
-                        </TableCell>
+                        <TableCell>{record.department_name || "—"}</TableCell>
                         <TableCell>{record.duration_minutes} min</TableCell>
                         <TableCell>
                           <span

@@ -1,24 +1,19 @@
-import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { navigate } from "raviger";
 import { ArrowLeft } from "lucide-react";
+import { navigate } from "raviger";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 import Loading from "@/components/Common/Loading";
 import Page from "@/components/Common/Page";
 
-import query from "@/Utils/request/query";
 import mutate from "@/Utils/request/mutate";
+import query from "@/Utils/request/query";
 
 import FacilityOrganizationSelector from "@/pages/Facility/settings/organizations/components/FacilityOrganizationSelector";
 
@@ -326,7 +321,8 @@ export default function SurgeryProcedureForm({
                   onChange={(event) =>
                     setForm((previous) => ({
                       ...previous,
-                      status: event.target.value as SurgeryProcedureWrite["status"],
+                      status: event.target
+                        .value as SurgeryProcedureWrite["status"],
                     }))
                   }
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"

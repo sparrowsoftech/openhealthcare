@@ -1,15 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { navigate } from "raviger";
 import { Pencil, Plus, Trash2 } from "lucide-react";
+import { navigate } from "raviger";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -22,8 +17,8 @@ import {
 import Loading from "@/components/Common/Loading";
 import Page from "@/components/Common/Page";
 
-import query from "@/Utils/request/query";
 import mutate from "@/Utils/request/mutate";
+import query from "@/Utils/request/query";
 
 import surgeryProcedureApi from "@/types/ot/surgeryProcedureApi";
 
@@ -37,7 +32,7 @@ export default function SurgeryProcedureList({ facilityId }: Props) {
 
   const { data, isLoading, isError } = useQuery({
     queryKey,
-    queryFn: query(surgeryProcedureApi.list, {
+    queryFn: query.paginated(surgeryProcedureApi.list, {
       pathParams: { facilityId },
     }),
   });
@@ -88,9 +83,7 @@ export default function SurgeryProcedureList({ facilityId }: Props) {
 
           <Button
             onClick={() =>
-              navigate(
-                `/facility/${facilityId}/ot/surgery-procedures/new`,
-              )
+              navigate(`/facility/${facilityId}/ot/surgery-procedures/new`)
             }
           >
             <Plus className="mr-2 size-4" />
