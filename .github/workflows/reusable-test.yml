@@ -57,7 +57,9 @@ jobs:
             --platform linux/arm64 \
             --load \
             .
-
+      - name: Test MinIO image pull
+        run: docker pull dappros/minio:RELEASE.2025-09-07T16-13-09Z
+        
       - name: Start services
         run: |
           docker compose -f docker-compose.yaml -f docker-compose.local.yaml up -d --wait || \
