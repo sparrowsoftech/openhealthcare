@@ -191,7 +191,9 @@ export function PatientRegistration(props: PatientRegistrationProps) {
       <Form {...form}>
         <form onSubmit={onSubmit} className="mx-auto space-y-6">
           <div className="container mx-auto p-4 max-w-3xl">
-            <h2 className="text-xl font-semibold">Patient Basic</h2>
+            <h2 className="text-xl font-semibold">
+              Patient Basiccccccccccccc
+            </h2>
 
             <div className="mt-4 space-y-6 flex flex-col bg-white border border-gray-200/50 rounded-md p-8 shadow-md">
               <span className="inline-block bg-primary-100 p-4 rounded-md w-full mb-4 text-primary-600 text-sm">
@@ -206,7 +208,10 @@ export function PatientRegistration(props: PatientRegistrationProps) {
                   <FormItem className="flex flex-col">
                     <FormLabel>Test Field</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Enter test value" />
+                      <Input
+                        {...field}
+                        placeholder="Enter test value"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

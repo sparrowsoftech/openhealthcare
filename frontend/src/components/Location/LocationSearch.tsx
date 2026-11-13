@@ -56,6 +56,7 @@ export function LocationSearch({
 
   const { data: locations } = useQuery({
     queryKey: ["locations", facilityId, mode, form, search],
+    queryKey: ["locations", facilityId, mode, search],
     queryFn: query.debounced(locationApi.list, {
       pathParams: { facility_id: facilityId },
       queryParams: { mode, name: search, form },
@@ -79,25 +80,21 @@ export function LocationSearch({
         onValueChange={setSearch}
         autoFocus
       />
-
-      {filteredLocations.length === 0 ? (
-        <CommandEmpty>{t("no_locations_found")}</CommandEmpty>
-      ) : (
-        <CommandGroup>
-          {filteredLocations.map((location) => (
-            <CommandItem
-              key={location.id}
-              value={location.id}
-              onSelect={() => {
-                onSelect(location);
-                setOpen(false);
-              }}
-            >
-              {stringifyNestedObject(location)}
-            </CommandItem>
-          ))}
-        </CommandGroup>
-      )}
+      <CommandEmpty>{t("no_locations_found")}</CommandEmpty>
+      <CommandGroup>
+        {locations?.results.map((location) => (
+          <CommandItem
+            key={location.id}
+            value={location.id}
+            onSelect={() => {
+              onSelect(location);
+              setOpen(false);
+            }}
+          >
+            {stringifyNestedObject(location)}
+          </CommandItem>
+        ))}
+      </CommandGroup>
     </Command>
   );
 

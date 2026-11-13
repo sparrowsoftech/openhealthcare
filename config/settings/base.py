@@ -138,6 +138,19 @@ LOCAL_APPS = [
     "care.audit_log",
     "care.emr",
 ]
+LOCAL_APPS = [
+    "care.security",
+    "care.facility",
+    "care.users",
+    "care.audit_log",
+    "care.emr",
+]
+
+PLUGIN_APPS = manager.get_apps()
+
+# Plugin Section
+
+PLUGIN_CONFIGS = manager.get_config()
 
 PLUGIN_APPS = manager.get_apps()
 
@@ -542,7 +555,45 @@ USE_SMS = False
 
 # Cloud and Buckets
 # ------------------------------------------------------------------------------
+# https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        minutes=env("JWT_ACCESS_TOKEN_LIFETIME", default=10)
+    ),
+    "REFRESH_TOKEN_LIFETIME": timedelta(
+        minutes=env("JWT_REFRESH_TOKEN_LIFETIME", default=30)
+    ),
+    "ROTATE_REFRESH_TOKENS": True,
+    "USER_ID_FIELD": "external_id",
+}
 
+# Celery (background tasks)
+# ------------------------------------------------------------------------------
+# https://docs.celeryq.dev/en/latest/userguide/configuration.html#std:setting-timezone
+if USE_TZ:
+    # https://docs.celeryq.dev/en/latest/userguide/configuration.html#std:setting-timezone
+    CELERY_TIMEZONE = TIME_ZONE
+# https://docs.celeryq.dev/en/latest/userguide/configuration.html#std:setting-broker_url
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=REDIS_URL)
+# https://docs.celeryq.dev/en/latest/userguide/configuration.html#std:setting-result_backend
+CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+# https://docs.celeryq.dev/en/latest/userguide/configuration.html#std:setting-accept_content
+CELERY_ACCEPT_CONTENT = ["json"]
+# https://docs.celeryq.dev/en/latest/userguide/configuration.html#std:setting-task_serializer
+CELERY_TASK_SERIALIZER = "json"
+# https://docs.celeryq.dev/en/latest/userguide/configuration.html#std:setting-result_serializer
+CELERY_RESULT_SERIALIZER = "json"
+# https://docs.celeryq.dev/en/latest/userguide/configuration.html#task-time-limit
+# TODO: set to whatever value is adequate in your circumstances
+CELERY_TASK_TIME_LIMIT = 1800 * 5
+# https://docs.celeryq.dev/en/latest/userguide/configuration.html#task-soft-time-limit
+# TODO: set to whatever value is adequate in your circumstances
+CELERY_TASK_SOFT_TIME_LIMIT = 1800
+
+# Maintenance Mode
+# ------------------------------------------------------------------------------
+# https://github.com/fabiocaccamo/django-maintenance-mode/tree/main#configuration-optional
+MAINTENANCE_MODE = int(env("MAINTENANCE_MODE", default="0"))
 
 BUCKET_PROVIDER = env("BUCKET_PROVIDER", default="aws").upper()
 BUCKET_REGION = env("BUCKET_REGION", default="ap-south-1")
@@ -740,15 +791,3 @@ TOTP_DISABLED_EMAIL_TEMPLATE_PATH = env(
 
 # Cleanup incomplete file uploads, set to 0 to disable
 FILE_UPLOAD_EXPIRY_HOURS = env.int("FILE_UPLOAD_EXPIRY_HOURS", default=24)
-
-WATI_BASE_URL = env(
-    "WATI_BASE_URL",
-    default="",
-)
-
-WATI_ACCESS_TOKEN = env(
-    "WATI_ACCESS_TOKEN",
-    default="",
-)
-
-WATI_CHANNEL_NUMBER = env("WATI_CHANNEL_NUMBER", default="")

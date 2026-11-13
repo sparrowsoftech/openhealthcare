@@ -1,0 +1,313 @@
+name: Deploy OHC CARE UAT (Static Frontends)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ohc-care-uat-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy UAT frontends
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment:
+      name: UAT
+
+    steps:
+      - name: Checkout CARE staging branch
+        uses: actions/checkout@v5
+        with:
+          ref: staging
+          path: care
+          persist-credentials: false
+
+      - name: Checkout pinned ABDM plugin
+        uses: actions/checkout@v5
+        with:
+          repository: ohcnetwork/care_abdm_fe
+          ref: 0f96451ee989e89880870fdffd170cc19c84cfa7
+          path: plugins/care_abdm_fe
+          persist-credentials: false
+
+      - name: Checkout pinned EKA Scribe plugin
+        uses: actions/checkout@v5
+        with:
+          repository: ohcnetwork/care_eka_scribe_fe
+          ref: f6a8dd71f25613ddd0074cbbefb6e58c9a0fe93b
+          path: plugins/care_eka_scribe_fe
+          persist-credentials: false
+
+      - name: Checkout pinned Excalidraw plugin
+        uses: actions/checkout@v5
+        with:
+          repository: ohcnetwork/care_excalidraw_fe
+          ref: ce17a39ac50b2d61d01ab4f97a6374e3b83794ec
+          path: plugins/care_excalidraw_fe
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+          cache-dependency-path: |
+            care/frontend/package-lock.json
+            plugins/care_abdm_fe/package-lock.json
+            plugins/care_eka_scribe_fe/package-lock.json
+            plugins/care_excalidraw_fe/package-lock.json
+
+      - name: Build CARE frontend
+        working-directory: care/frontend
+        env:
+          FRONTEND_ENV: ${{ secrets.UAT_FRONTEND_ENV }}
+          FRONTEND_ENV_LOCAL: ${{ secrets.UAT_FRONTEND_ENV_LOCAL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+
+          test -n "$FRONTEND_ENV" || {
+            echo "::error::Missing GitHub Environment secret UAT_FRONTEND_ENV"
+            exit 1
+          }
+          test -n "$FRONTEND_ENV_LOCAL" || {
+            echo "::error::Missing GitHub Environment secret UAT_FRONTEND_ENV_LOCAL"
+            exit 1
+          }
+
+          printf '%s' "$FRONTEND_ENV" > .env
+          printf '%s' "$FRONTEND_ENV_LOCAL" > .env.local
+          trap 'rm -f .env .env.local' EXIT
+
+          npm ci
+          npm run build
+
+          test -s build/index.html
+
+      - name: Build ABDM plugin
+        working-directory: plugins/care_abdm_fe
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          test -s dist/assets/remoteEntry.js
+
+      - name: Build EKA Scribe plugin
+        working-directory: plugins/care_eka_scribe_fe
+        env:
+          SCRIBE_ENV: ${{ secrets.UAT_SCRIBE_ENV }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+
+          test -n "$SCRIBE_ENV" || {
+            echo "::error::Missing GitHub Environment secret UAT_SCRIBE_ENV"
+            exit 1
+          }
+
+          printf '%s' "$SCRIBE_ENV" > .env
+          trap 'rm -f .env' EXIT
+
+          npm ci
+          npm run build
+          test -s dist/assets/remoteEntry.js
+
+      - name: Build Excalidraw plugin
+        working-directory: plugins/care_excalidraw_fe
+        env:
+          CARE_URL: ${{ vars.UAT_VITE_CARE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+
+          test -n "$CARE_URL" || {
+            echo "::error::Missing GitHub Environment variable UAT_VITE_CARE_URL"
+            exit 1
+          }
+
+          printf 'VITE_CARE_URL=%s\n' "$CARE_URL" > .env.production
+          trap 'rm -f .env.production' EXIT
+
+          npm ci
+          npm run build
+          test -s dist/assets/remoteEntry.js
+
+      - name: Prepare deployment payload
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RELEASE_DIR="$RUNNER_TEMP/uat-release"
+          mkdir -p \
+            "$RELEASE_DIR/frontend" \
+            "$RELEASE_DIR/care_abdm_fe" \
+            "$RELEASE_DIR/care_eka_scribe_fe" \
+            "$RELEASE_DIR/care_excalidraw_fe"
+
+          cp -a care/frontend/build/. "$RELEASE_DIR/frontend/"
+          cp -a plugins/care_abdm_fe/dist/. "$RELEASE_DIR/care_abdm_fe/"
+          cp -a plugins/care_eka_scribe_fe/dist/. "$RELEASE_DIR/care_eka_scribe_fe/"
+          cp -a plugins/care_excalidraw_fe/dist/. "$RELEASE_DIR/care_excalidraw_fe/"
+
+          test -s "$RELEASE_DIR/frontend/index.html"
+          test -s "$RELEASE_DIR/care_abdm_fe/assets/remoteEntry.js"
+          test -s "$RELEASE_DIR/care_eka_scribe_fe/assets/remoteEntry.js"
+          test -s "$RELEASE_DIR/care_excalidraw_fe/assets/remoteEntry.js"
+
+      - name: Validate UAT SSH settings
+        env:
+          UAT_HOST: ${{ vars.UAT_HOST }}
+          UAT_USER: ${{ vars.UAT_USER }}
+          UAT_PORT: ${{ vars.UAT_PORT }}
+          UAT_KNOWN_HOSTS: ${{ vars.UAT_KNOWN_HOSTS }}
+          UAT_SSH_KEY: ${{ secrets.UAT_SSH_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -n "$UAT_HOST" || { echo "::error::Missing UAT_HOST"; exit 1; }
+          test -n "$UAT_USER" || { echo "::error::Missing UAT_USER"; exit 1; }
+          test -n "$UAT_PORT" || { echo "::error::Missing UAT_PORT"; exit 1; }
+          test -n "$UAT_KNOWN_HOSTS" || { echo "::error::Missing UAT_KNOWN_HOSTS"; exit 1; }
+          test -n "$UAT_SSH_KEY" || { echo "::error::Missing UAT_SSH_KEY"; exit 1; }
+
+          if ! [[ "$UAT_PORT" =~ ^[0-9]+$ ]]; then
+            echo "::error::UAT_PORT must be numeric"
+            exit 1
+          fi
+
+      - name: Load SSH key and pin UAT host key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.UAT_SSH_KEY }}
+
+      - name: Configure strict SSH host verification
+        env:
+          UAT_KNOWN_HOSTS: ${{ vars.UAT_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$UAT_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Upload release to UAT staging directory
+        env:
+          UAT_HOST: ${{ vars.UAT_HOST }}
+          UAT_USER: ${{ vars.UAT_USER }}
+          UAT_PORT: ${{ vars.UAT_PORT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          REMOTE_STAGE="/opt/openhealthcare/.uat-staging/${GITHUB_RUN_ID}"
+
+          ssh -p "$UAT_PORT" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "$UAT_USER@$UAT_HOST" \
+            "mkdir -p '$REMOTE_STAGE'"
+
+          for component in \
+            frontend \
+            care_abdm_fe \
+            care_eka_scribe_fe \
+            care_excalidraw_fe
+          do
+            rsync -az \
+              -e "ssh -p $UAT_PORT -o BatchMode=yes -o StrictHostKeyChecking=yes" \
+              "$RUNNER_TEMP/uat-release/$component/" \
+              "$UAT_USER@$UAT_HOST:$REMOTE_STAGE/$component/"
+          done
+
+      - name: Backup and deploy static frontends with rollback
+        env:
+          UAT_HOST: ${{ vars.UAT_HOST }}
+          UAT_USER: ${{ vars.UAT_USER }}
+          UAT_PORT: ${{ vars.UAT_PORT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ssh -p "$UAT_PORT" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "$UAT_USER@$UAT_HOST" \
+            "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE_SCRIPT'
+          set -Eeuo pipefail
+
+          RUN_ID="$1"
+          BASE="/opt/openhealthcare"
+          STAGE="$BASE/.uat-staging/$RUN_ID"
+          BACKUP="$BASE/.uat-backups/$RUN_ID"
+
+          declare -A TARGETS=(
+            [frontend]="$BASE/frontend/build"
+            [care_abdm_fe]="$BASE/care_abdm_fe"
+            [care_eka_scribe_fe]="$BASE/care_eka_scribe_fe"
+            [care_excalidraw_fe]="$BASE/care_excalidraw_fe"
+          )
+
+          for component in frontend care_abdm_fe care_eka_scribe_fe care_excalidraw_fe; do
+            test -d "${TARGETS[$component]}" || {
+              echo "Missing live target: ${TARGETS[$component]}"
+              exit 1
+            }
+            test -d "$STAGE/$component" || {
+              echo "Missing staged component: $STAGE/$component"
+              exit 1
+            }
+          done
+
+          mkdir -p "$BACKUP"
+
+          # Back up every live directory before changing any live file.
+          for component in frontend care_abdm_fe care_eka_scribe_fe care_excalidraw_fe; do
+            mkdir -p "$BACKUP/$component"
+            cp -a "${TARGETS[$component]}/." "$BACKUP/$component/"
+          done
+
+          rollback() {
+            rc=$?
+            trap - ERR
+            echo "Deployment failed (exit $rc). Restoring previous static files..."
+            for component in frontend care_abdm_fe care_eka_scribe_fe care_excalidraw_fe; do
+              if [ -d "$BACKUP/$component" ]; then
+                rsync -a --delete \
+                  "$BACKUP/$component/" \
+                  "${TARGETS[$component]}/" || \
+                  echo "WARNING: rollback failed for $component"
+              fi
+            done
+            exit "$rc"
+          }
+          trap rollback ERR
+
+          # Deliberately do not use --delete on the first deployment.
+          # This preserves any uninspected files already present in live directories.
+          for component in frontend care_abdm_fe care_eka_scribe_fe care_excalidraw_fe; do
+            rsync -rlt --no-perms --no-owner --no-group \
+              "$STAGE/$component/" \
+              "${TARGETS[$component]}/"
+          done
+
+          # Basic on-disk smoke checks; no backend, DB, or systemd changes.
+          test -s "${TARGETS[frontend]}/index.html"
+          test -s "${TARGETS[care_abdm_fe]}/assets/remoteEntry.js"
+          test -s "${TARGETS[care_eka_scribe_fe]}/assets/remoteEntry.js"
+          test -s "${TARGETS[care_excalidraw_fe]}/assets/remoteEntry.js"
+
+          trap - ERR
+          echo "Static frontend deployment completed."
+          echo "Backup retained at: $BACKUP"
+          rm -rf -- "$STAGE"
+          REMOTE_SCRIPT

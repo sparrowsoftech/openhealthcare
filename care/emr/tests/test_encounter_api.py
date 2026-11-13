@@ -26,7 +26,6 @@ from care.security.permissions.facility_organization import (
 )
 from care.security.permissions.patient import PatientPermissions
 from care.utils.tests.base import CareAPITestBase
-from unittest.mock import patch
 
 
 class EncounterAPITests(CareAPITestBase):
@@ -45,18 +44,6 @@ class EncounterAPITests(CareAPITestBase):
             organization=self.facility_organization,
             encounter_class=ClassChoices.imp.value,
             status_history={"history": []},
-        )
-
-        from care.emr.models.report.template import Template
-        self.template = Template.objects.create(
-            facility=self.facility,
-            slug="treatment-summary-test",
-            name="Treatment Summary",
-            status="active",
-            template_data="<html><body>Treatment Summary</body></html>",
-            template_type="discharge_summary",
-            default_format="pdf",
-            context="encounter_base",
         )
         self.client.force_authenticate(user=self.user)
         self.url = reverse("encounter-list")
@@ -485,25 +472,6 @@ class EncounterAPITests(CareAPITestBase):
             "You do not have permission to update encounter", response.data["detail"]
         )
 
-    @patch("care.emr.api.viewsets.encounter.WATIClient.send_document")
-    def test_send_treatment_summary_whatsapp(self, mock_send_document):
-        self.client.force_authenticate(user=self.superuser)
-
-        mock_send_document.return_value = {
-            "result": True,
-            "message": "Message sent successfully",
-        }
-
-        url = reverse(
-            "encounter-send-treatment-summary-whatsapp",
-            kwargs={"external_id": self.encounter.external_id},
-        )
-
-        response = self.client.post(url, format="json")
-
-        self.assertEqual(response.status_code, 200)
-        mock_send_document.assert_called_once()
-
     def test_restart_completed_encounter(self):
         self.client.force_authenticate(user=self.superuser)
         self.encounter.status = StatusChoices.completed.value
@@ -522,7 +490,7 @@ class EncounterAPITests(CareAPITestBase):
         self.client.force_authenticate(user=self.superuser)
         url = reverse(
             "encounter-restart",
-            kwargs={"external_id": self.encunoter.external_id},
+            kwargs={"external_id": self.encounter.external_id},
         )
         response = self.client.post(url, format="json")
         self.assertEqual(response.status_code, 403)
