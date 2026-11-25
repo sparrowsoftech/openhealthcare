@@ -78,7 +78,7 @@ jobs:
           trap 'rm -f .env .env.local' EXIT
 
           npm ci
-          npm run build
+          NODE_OPTIONS=--max-old-space-size=3072 npm run build
 
           test -s build/index.html
 
