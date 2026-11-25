@@ -1,0 +1,216 @@
+name: Deploy OHC CARE UAT (Static Frontends)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ohc-care-uat-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy UAT frontends
+    runs-on: [self-hosted, linux, x64, uat]
+    timeout-minutes: 90
+    environment:
+      name: UAT
+
+    steps:
+      - name: Checkout CARE staging branch
+        uses: actions/checkout@v5
+        with:
+          ref: staging
+          path: care
+          persist-credentials: false
+
+      - name: Checkout pinned ABDM plugin
+        uses: actions/checkout@v5
+        with:
+          repository: ohcnetwork/care_abdm_fe
+          ref: 0f96451ee989e89880870fdffd170cc19c84cfa7
+          path: plugins/care_abdm_fe
+          persist-credentials: false
+
+      - name: Checkout pinned EKA Scribe plugin
+        uses: actions/checkout@v5
+        with:
+          repository: ohcnetwork/care_eka_scribe_fe
+          ref: f6a8dd71f25613ddd0074cbbefb6e58c9a0fe93b
+          path: plugins/care_eka_scribe_fe
+          persist-credentials: false
+
+      - name: Checkout pinned Excalidraw plugin
+        uses: actions/checkout@v5
+        with:
+          repository: ohcnetwork/care_excalidraw_fe
+          ref: ce17a39ac50b2d61d01ab4f97a6374e3b83794ec
+          path: plugins/care_excalidraw_fe
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+          cache-dependency-path: |
+            care/frontend/package-lock.json
+            plugins/care_abdm_fe/package-lock.json
+            plugins/care_eka_scribe_fe/package-lock.json
+            plugins/care_excalidraw_fe/package-lock.json
+
+      - name: Build CARE frontend
+        working-directory: care/frontend
+        env:
+          FRONTEND_ENV: ${{ secrets.UAT_FRONTEND_ENV }}
+          FRONTEND_ENV_LOCAL: ${{ secrets.UAT_FRONTEND_ENV_LOCAL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+
+          test -n "$FRONTEND_ENV" || {
+            echo "::error::Missing GitHub Environment secret UAT_FRONTEND_ENV"
+            exit 1
+          }
+          test -n "$FRONTEND_ENV_LOCAL" || {
+            echo "::error::Missing GitHub Environment secret UAT_FRONTEND_ENV_LOCAL"
+            exit 1
+          }
+
+          printf '%s' "$FRONTEND_ENV" > .env
+          printf '%s' "$FRONTEND_ENV_LOCAL" > .env.local
+          trap 'rm -f .env .env.local' EXIT
+
+          npm ci
+          npm run build
+
+          test -s build/index.html
+
+      - name: Build ABDM plugin
+        working-directory: plugins/care_abdm_fe
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          test -s dist/assets/remoteEntry.js
+
+      - name: Build EKA Scribe plugin
+        working-directory: plugins/care_eka_scribe_fe
+        env:
+          SCRIBE_ENV: ${{ secrets.UAT_SCRIBE_ENV }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+
+          test -n "$SCRIBE_ENV" || {
+            echo "::error::Missing GitHub Environment secret UAT_SCRIBE_ENV"
+            exit 1
+          }
+
+          printf '%s' "$SCRIBE_ENV" > .env
+          trap 'rm -f .env' EXIT
+
+          npm ci
+          npm run build
+          test -s dist/assets/remoteEntry.js
+
+      - name: Build Excalidraw plugin
+        working-directory: plugins/care_excalidraw_fe
+        env:
+          CARE_URL: ${{ vars.UAT_VITE_CARE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+
+          test -n "$CARE_URL" || {
+            echo "::error::Missing GitHub Environment variable UAT_VITE_CARE_URL"
+            exit 1
+          }
+
+          printf 'VITE_CARE_URL=%s\n' "$CARE_URL" > .env.production
+          trap 'rm -f .env.production' EXIT
+
+          npm ci
+          npm run build
+          test -s dist/assets/remoteEntry.js
+
+      - name: Prepare deployment payload
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RELEASE_DIR="$RUNNER_TEMP/uat-release"
+          mkdir -p \
+            "$RELEASE_DIR/frontend" \
+            "$RELEASE_DIR/care_abdm_fe" \
+            "$RELEASE_DIR/care_eka_scribe_fe" \
+            "$RELEASE_DIR/care_excalidraw_fe"
+
+          cp -a care/frontend/build/. "$RELEASE_DIR/frontend/"
+          cp -a plugins/care_abdm_fe/dist/. "$RELEASE_DIR/care_abdm_fe/"
+          cp -a plugins/care_eka_scribe_fe/dist/. "$RELEASE_DIR/care_eka_scribe_fe/"
+          cp -a plugins/care_excalidraw_fe/dist/. "$RELEASE_DIR/care_excalidraw_fe/"
+
+          test -s "$RELEASE_DIR/frontend/index.html"
+          test -s "$RELEASE_DIR/care_abdm_fe/assets/remoteEntry.js"
+          test -s "$RELEASE_DIR/care_eka_scribe_fe/assets/remoteEntry.js"
+          test -s "$RELEASE_DIR/care_excalidraw_fe/assets/remoteEntry.js"
+
+      - name: Stage release on UAT runner
+        shell: bash
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$RUN_ID" =~ ^[0-9]{1,20}$ ]]
+
+          RELEASE_DIR="$RUNNER_TEMP/uat-release"
+          INCOMING="/var/lib/ohc-uat-deploy/incoming"
+          STAGE="$INCOMING/$RUN_ID"
+
+          test -d "$RELEASE_DIR"
+          test -d "$INCOMING"
+          test ! -e "$STAGE"
+          test ! -L "$STAGE"
+
+          mkdir -m 0700 "$STAGE"
+
+          for component in frontend care_abdm_fe care_eka_scribe_fe care_excalidraw_fe; do
+            SOURCE="$RELEASE_DIR/$component"
+            test -d "$SOURCE"
+            test ! -L "$SOURCE"
+            cp -a "$SOURCE" "$STAGE/$component"
+          done
+
+          test -s "$STAGE/frontend/index.html"
+          test -s "$STAGE/care_abdm_fe/assets/remoteEntry.js"
+          test -s "$STAGE/care_eka_scribe_fe/assets/remoteEntry.js"
+          test -s "$STAGE/care_excalidraw_fe/assets/remoteEntry.js"
+
+      - name: Deploy UAT frontends using restricted helper
+        shell: bash
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$RUN_ID" =~ ^[0-9]{1,20}$ ]]
+          printf '%s\n' "$RUN_ID" | sudo -n /usr/local/sbin/ohc-uat-deploy
+
+      - name: Cleanup unclaimed staging after failure
+        if: ${{ failure() }}
+        shell: bash
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$RUN_ID" =~ ^[0-9]{1,20}$ ]]
+          STAGE="/var/lib/ohc-uat-deploy/incoming/$RUN_ID"
+          if [[ -d "$STAGE" && ! -L "$STAGE" ]]; then
+            rm -rf -- "$STAGE"
+          fi
