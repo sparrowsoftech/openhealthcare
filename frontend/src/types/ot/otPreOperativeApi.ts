@@ -46,7 +46,9 @@ export interface OTPreOperativeAssessment {
 
   vitals: Record<string, string | number>;
   day_before_surgery: Record<string, string | boolean>;
+  surgery_checklist_ids: string;
   day_of_surgery: Record<string, string | boolean>;
+  day_of_surgery_checklist_ids: string;
   allergies: string;
   clinical_remarks: string;
 
@@ -73,7 +75,9 @@ export interface OTPreOperativeAssessmentInput {
 
   vitals: Record<string, string | number>;
   day_before_surgery: Record<string, string | boolean>;
+  surgery_checklist_ids: string;
   day_of_surgery: Record<string, string | boolean>;
+  day_of_surgery_checklist_ids: string;
   allergies: string;
   clinical_remarks: string;
 

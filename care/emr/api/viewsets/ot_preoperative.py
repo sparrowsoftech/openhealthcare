@@ -1,16 +1,15 @@
 from django.db import transaction
-
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from care.emr.models.organization import FacilityOrganizationUser
 from care.emr.models.ot import (
     OTPreOperativeAssessment,
     SurgeryAnaesthesiaConfig,
     SurgerySchedule,
 )
-from care.emr.models.organization import FacilityOrganizationUser
 from care.facility.models import Facility
 from care.security.authorization import AuthorizationController
 from care.utils.shortcuts import get_object_or_404
@@ -34,6 +33,8 @@ class OTPreOperativeAssessmentViewSet(GenericViewSet):
         "consent_remarks",
         "vitals",
         "day_before_surgery",
+        "surgery_checklist_ids",
+        "day_of_surgery_checklist_ids",
         "day_of_surgery",
         "allergies",
         "clinical_remarks",
@@ -80,9 +81,7 @@ class OTPreOperativeAssessmentViewSet(GenericViewSet):
             organization__facility=facility,
             user=self.request.user,
         ).exists():
-            raise PermissionDenied(
-                "You are not a member of this facility."
-            )
+            raise PermissionDenied("You are not a member of this facility.")
 
         return facility
 
@@ -107,9 +106,7 @@ class OTPreOperativeAssessmentViewSet(GenericViewSet):
             self.request.user,
             schedule.service_request,
         ):
-            raise PermissionDenied(
-                "You cannot access this Surgery Order."
-            )
+            raise PermissionDenied("You cannot access this Surgery Order.")
 
         return schedule
 
@@ -126,9 +123,7 @@ class OTPreOperativeAssessmentViewSet(GenericViewSet):
             "patient_id": str(patient.external_id),
             "patient_name": patient.name,
             "age": (
-                patient.age
-                if patient.date_of_birth or patient.year_of_birth
-                else None
+                patient.age if patient.date_of_birth or patient.year_of_birth else None
             ),
             "gender": patient.gender,
             "surgery_procedure": (
@@ -160,9 +155,7 @@ class OTPreOperativeAssessmentViewSet(GenericViewSet):
                 if assessment.anaesthesia_config
                 else None
             ),
-            "patient_identity_verified": (
-                assessment.patient_identity_verified
-            ),
+            "patient_identity_verified": (assessment.patient_identity_verified),
             "procedure_verified": assessment.procedure_verified,
             "surgical_site_verified": assessment.surgical_site_verified,
             "investigations_reviewed": assessment.investigations_reviewed,
@@ -171,6 +164,8 @@ class OTPreOperativeAssessmentViewSet(GenericViewSet):
             "consent_remarks": assessment.consent_remarks,
             "vitals": assessment.vitals,
             "day_before_surgery": assessment.day_before_surgery,
+            "surgery_checklist_ids": assessment.surgery_checklist_ids,
+            "day_of_surgery_checklist_ids": assessment.day_of_surgery_checklist_ids,
             "day_of_surgery": assessment.day_of_surgery,
             "allergies": assessment.allergies,
             "clinical_remarks": assessment.clinical_remarks,
@@ -203,9 +198,7 @@ class OTPreOperativeAssessmentViewSet(GenericViewSet):
 
         schedule_id = request.query_params.get("schedule_id")
         if schedule_id:
-            assessments = assessments.filter(
-                surgery_schedule__external_id=schedule_id
-            )
+            assessments = assessments.filter(surgery_schedule__external_id=schedule_id)
 
         results = []
 
@@ -217,10 +210,94 @@ class OTPreOperativeAssessmentViewSet(GenericViewSet):
             ):
                 results.append(self._assessment_data(assessment))
 
-        return Response({
-            "count": len(results),
-            "results": results,
-        })
+        return Response(
+            {
+                "count": len(results),
+                "results": results,
+            }
+        )
+
+    def _get_existing_assessment(self, facility, schedule):
+        return (
+            OTPreOperativeAssessment.objects.filter(
+                facility=facility,
+                surgery_schedule=schedule,
+                deleted=False,
+            )
+            .select_related("anaesthesia_config")
+            .first()
+        )
+
+    def _resolve_anaesthesia_config(
+        self,
+        request_data,
+        facility,
+        schedule,
+        existing_assessment,
+    ):
+        if "anaesthesia_config_id" in request_data:
+            config_id = request_data.get("anaesthesia_config_id")
+
+            if config_id in (None, ""):
+                return None
+
+            if not schedule.service_request.surgery_procedure_id:
+                raise ValidationError(
+                    {
+                        "anaesthesia_config_id": (
+                            "The scheduled surgery has no linked procedure."
+                        )
+                    }
+                )
+
+            return get_object_or_404(
+                SurgeryAnaesthesiaConfig,
+                external_id=config_id,
+                facility=facility,
+                surgery_procedure=schedule.service_request.surgery_procedure,
+                status="active",
+                deleted=False,
+            )
+
+        if existing_assessment and existing_assessment.anaesthesia_config:
+            return existing_assessment.anaesthesia_config
+
+        anaesthesia_config = schedule.anaesthesia_config
+
+        if anaesthesia_config and (
+            anaesthesia_config.facility_id != facility.pk
+            or anaesthesia_config.status != "active"
+            or anaesthesia_config.deleted
+            or anaesthesia_config.surgery_procedure_id
+            != schedule.service_request.surgery_procedure_id
+        ):
+            return None
+
+        return anaesthesia_config
+
+    def _validate_assessment_data(self, data):
+        for field, choices in self.choice_fields.items():
+            if field in data and data[field] not in choices:
+                raise ValidationError({field: "Invalid choice."})
+
+        for field in self.boolean_fields:
+            if field in data and not isinstance(data[field], bool):
+                raise ValidationError({field: "A boolean value is required."})
+
+        for field in self.text_fields:
+            if field in data and not isinstance(data[field], str):
+                raise ValidationError({field: "A string value is required."})
+
+        if "vitals" in data and not isinstance(data["vitals"], dict):
+            raise ValidationError(
+                {"vitals": "Vitals must be provided as a JSON object."}
+            )
+
+        for field in ("day_before_surgery", "day_of_surgery"):
+            if field in data and not isinstance(data[field], dict):
+                raise ValidationError(
+                    {field: ("Checklist data must be provided as a JSON object.")}
+                )
 
     def create(self, request, *args, **kwargs):
         """
@@ -233,58 +310,19 @@ class OTPreOperativeAssessmentViewSet(GenericViewSet):
         schedule_id = request.data.get("schedule_id")
 
         if not schedule_id:
-            raise ValidationError({
-                "schedule_id": "This field is required."
-            })
+            raise ValidationError({"schedule_id": "This field is required."})
 
         schedule = self._get_schedule(facility, schedule_id)
-
-        existing_assessment = (
-            OTPreOperativeAssessment.objects.filter(
-                facility=facility,
-                surgery_schedule=schedule,
-                deleted=False,
-            )
-            .select_related("anaesthesia_config")
-            .first()
+        existing_assessment = self._get_existing_assessment(
+            facility,
+            schedule,
         )
-
-        if "anaesthesia_config_id" in request.data:
-            config_id = request.data.get("anaesthesia_config_id")
-
-            if config_id in (None, ""):
-                anaesthesia_config = None
-            else:
-                if not schedule.service_request.surgery_procedure_id:
-                    raise ValidationError({
-                        "anaesthesia_config_id": (
-                            "The scheduled surgery has no linked procedure."
-                        )
-                    })
-
-                anaesthesia_config = get_object_or_404(
-                    SurgeryAnaesthesiaConfig,
-                    external_id=config_id,
-                    facility=facility,
-                    surgery_procedure=(
-                        schedule.service_request.surgery_procedure
-                    ),
-                    status="active",
-                    deleted=False,
-                )
-        elif existing_assessment and existing_assessment.anaesthesia_config:
-            anaesthesia_config = existing_assessment.anaesthesia_config
-        else:
-            anaesthesia_config = schedule.anaesthesia_config
-
-            if anaesthesia_config and (
-                anaesthesia_config.facility_id != facility.pk
-                or anaesthesia_config.status != "active"
-                or anaesthesia_config.deleted
-                or anaesthesia_config.surgery_procedure_id
-                != schedule.service_request.surgery_procedure_id
-            ):
-                anaesthesia_config = None
+        anaesthesia_config = self._resolve_anaesthesia_config(
+            request.data,
+            facility,
+            schedule,
+            existing_assessment,
+        )
 
         data = {
             key: value
@@ -292,43 +330,13 @@ class OTPreOperativeAssessmentViewSet(GenericViewSet):
             if key in self.writable_fields
         }
         data["anaesthesia_config"] = anaesthesia_config
-
-        for field in self.choice_fields:
-            if field in data and data[field] not in self.choice_fields[field]:
-                raise ValidationError({
-                    field: "Invalid choice."
-                })
-
-        for field in self.boolean_fields:
-            if field in data and not isinstance(data[field], bool):
-                raise ValidationError({
-                    field: "A boolean value is required."
-                })
-
-        for field in self.text_fields:
-            if field in data and not isinstance(data[field], str):
-                raise ValidationError({
-                    field: "A string value is required."
-                })
-
-        if "vitals" in data and not isinstance(data["vitals"], dict):
-            raise ValidationError({
-                "vitals": "Vitals must be provided as a JSON object."
-            })
-
-        for field in ("day_before_surgery", "day_of_surgery"):
-            if field in data and not isinstance(data[field], dict):
-                raise ValidationError({
-                    field: "Checklist data must be provided as a JSON object."
-                })
+        self._validate_assessment_data(data)
 
         with transaction.atomic():
-            assessment, created = (
-                OTPreOperativeAssessment.objects.update_or_create(
-                    facility=facility,
-                    surgery_schedule=schedule,
-                    defaults=data,
-                )
+            assessment, created = OTPreOperativeAssessment.objects.update_or_create(
+                facility=facility,
+                surgery_schedule=schedule,
+                defaults=data,
             )
 
         return Response(
@@ -340,5 +348,5 @@ class OTPreOperativeAssessmentViewSet(GenericViewSet):
                 ),
                 "assessment": self._assessment_data(assessment),
             },
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+            status=(status.HTTP_201_CREATED if created else status.HTTP_200_OK),
         )

@@ -69,6 +69,23 @@ from care.emr.api.viewsets.organization import (
     OrganizationUsersViewSet,
     OrganizationViewSet,
 )
+from care.emr.api.viewsets.ot import (
+    AnaesthesiaViewSet,
+    DayOfSurgeryCheckListViewSet,
+    OTRoomViewSet,
+    OTWaitingListViewSet,
+    SurgeryAnaesthesiaConfigViewSet,
+    SurgeryCheckListViewSet,
+    SurgeryProcedureViewSet,
+)
+from care.emr.api.viewsets.ot_medicines_incidents import OTMedicinesIncidentsViewSet
+from care.emr.api.viewsets.ot_operation import OTOperationViewSet
+from care.emr.api.viewsets.ot_postoperative import (
+    OTPatientTransferViewSet,
+    OTPostOperativeViewSet,
+)
+from care.emr.api.viewsets.ot_preoperative import OTPreOperativeAssessmentViewSet
+from care.emr.api.viewsets.ot_schedule import OTSchedulingViewSet
 from care.emr.api.viewsets.patient import PatientViewSet
 from care.emr.api.viewsets.patient_identifier import PatientIdentifierConfigViewSet
 from care.emr.api.viewsets.payment_reconciliation import PaymentReconciliationViewSet
@@ -102,6 +119,7 @@ from care.emr.api.viewsets.scheduling.token_sub_queue import TokenSubQueueViewSe
 from care.emr.api.viewsets.service_request import ServiceRequestViewSet
 from care.emr.api.viewsets.specimen import SpecimenViewSet
 from care.emr.api.viewsets.specimen_definition import SpecimenDefinitionViewSet
+from care.emr.api.viewsets.surgery_order import SurgeryOrderViewSet
 from care.emr.api.viewsets.tag_config import TagConfigViewSet
 from care.emr.api.viewsets.totp import TOTPViewSet
 from care.emr.api.viewsets.user import UserViewSet
@@ -110,26 +128,6 @@ from care.security.api.viewsets.permissions import PermissionViewSet
 from care.security.api.viewsets.roles import RoleViewSet
 from care.users.api.otp_viewset.reset_password import OTPResetPasswordView
 from care.users.api.viewsets.plug_config import PlugConfigViewset
-from care.emr.api.viewsets.location import (
-    FacilityLocationEncounterViewSet,
-    FacilityLocationViewSet,
-)
-from care.emr.api.viewsets.ot import (
-    OTRoomViewSet,
-    SurgeryProcedureViewSet,
-    AnaesthesiaViewSet,
-    SurgeryAnaesthesiaConfigViewSet,
-    OTWaitingListViewSet,
-)
-from care.emr.api.viewsets.surgery_order import SurgeryOrderViewSet
-from care.emr.api.viewsets.ot_schedule import OTSchedulingViewSet
-from care.emr.api.viewsets.ot_preoperative import OTPreOperativeAssessmentViewSet
-from care.emr.api.viewsets.ot_operation import OTOperationViewSet
-from care.emr.api.viewsets.ot_medicines_incidents import OTMedicinesIncidentsViewSet
-from care.emr.api.viewsets.ot_postoperative import (
-    OTPostOperativeViewSet,
-    OTPatientTransferViewSet,
-)
 
 router = DefaultRouter() if settings.DEBUG else SimpleRouter()
 
@@ -590,6 +588,19 @@ router.register("template", TemplateViewSet, basename="template")
 router.register("template_reports", ReportUploadViewSet, basename="template-reports")
 
 router.register("extensions", ExtensionsViewSet, basename="extensions")
+
+router.register(
+    "surgery_checklist",
+    SurgeryCheckListViewSet,
+    basename="surgery-checklist",
+)
+
+router.register(
+    "day_of_surgery_checklist",
+    DayOfSurgeryCheckListViewSet,
+    basename="day-of-surgery-checklist",
+)
+
 app_name = "api"
 urlpatterns = [
     path("", include(router.urls)),

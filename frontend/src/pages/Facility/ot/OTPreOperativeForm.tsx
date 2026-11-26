@@ -20,6 +20,14 @@ import surgeryAnaesthesiaConfigApi, {
   type SurgeryAnaesthesiaConfig,
 } from "@/types/ot/surgeryAnaesthesiaConfigApi";
 
+import surgeryCheckListApi, {
+  type SurgeryCheckList,
+} from "@/types/ot/surgeryCheckListApi";
+
+import dayOfSurgeryCheckListApi, {
+  type DayOfSurgeryCheckList,
+} from "@/types/ot/dayOfSurgeryCheckListApi";
+
 interface Props {
   facilityId: string;
   scheduleId?: string;
@@ -43,6 +51,7 @@ const initialForm: AssessmentForm = {
     spo2: "",
     weight: "",
   },
+  surgery_checklist_ids: "",
   day_before_surgery: {
     proposed_anaesthesia_surgery: false,
     weight_checked: false,
@@ -56,6 +65,7 @@ const initialForm: AssessmentForm = {
     reports_reviewed: false,
     fasting_instructions_given: false,
   },
+  day_of_surgery_checklist_ids: "",
   day_of_surgery: {
     npo_confirmed: false,
     bath_skin_prep: false,
@@ -115,6 +125,12 @@ function Field({
 export default function OTPreOperativeForm({ facilityId, scheduleId }: Props) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<AssessmentForm>(initialForm);
+  const [selectedSurgeryChecklistIds, setSelectedSurgeryChecklistIds] =
+    useState<number[]>([]);
+  const [
+    selectedDayOfSurgeryChecklistIds,
+    setSelectedDayOfSurgeryChecklistIds,
+  ] = useState<number[]>([]);
 
   const assessmentQuery = useQuery({
     queryKey: ["ot-preoperative", facilityId, scheduleId],
@@ -139,6 +155,24 @@ export default function OTPreOperativeForm({ facilityId, scheduleId }: Props) {
     }),
     enabled: !!scheduleId,
   });
+
+  const surgeryCheckListQuery = useQuery({
+    queryKey: ["surgery-checklists"],
+    queryFn: query.paginated(surgeryCheckListApi.list),
+  });
+
+  const activeSurgeryCheckLists = (
+    surgeryCheckListQuery.data?.results ?? []
+  ).filter((item: SurgeryCheckList) => item.status === "active");
+
+  const dayOfSurgeryCheckListQuery = useQuery({
+    queryKey: ["day-of-surgery-checklists"],
+    queryFn: query.paginated(dayOfSurgeryCheckListApi.list),
+  });
+
+  const activeDayOfSurgeryCheckLists = (
+    dayOfSurgeryCheckListQuery.data?.results ?? []
+  ).filter((item: DayOfSurgeryCheckList) => item.status === "active");
 
   const schedule = scheduleQuery.data?.results?.find(
     (item: OTSchedule) => item.id === scheduleId,
@@ -169,10 +203,29 @@ export default function OTPreOperativeForm({ facilityId, scheduleId }: Props) {
         day_before_surgery: { ...initialForm.day_before_surgery },
         day_of_surgery: { ...initialForm.day_of_surgery },
       });
+      setSelectedSurgeryChecklistIds([]);
+      setSelectedDayOfSurgeryChecklistIds([]);
       return;
     }
 
+    setSelectedSurgeryChecklistIds(
+      (assessment.surgery_checklist_ids ?? "")
+        .split(",")
+        .map((id) => Number(id.trim()))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    );
+
+    setSelectedDayOfSurgeryChecklistIds(
+      (assessment.day_of_surgery_checklist_ids ?? "")
+        .split(",")
+        .map((id) => Number(id.trim()))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    );
+
     setForm({
+      surgery_checklist_ids: assessment.surgery_checklist_ids ?? "",
+      day_of_surgery_checklist_ids:
+        assessment.day_of_surgery_checklist_ids ?? "",
       anaesthesia_config_id: assessment.anaesthesia_config_id ?? null,
       patient_identity_verified: assessment.patient_identity_verified,
       procedure_verified: assessment.procedure_verified,
@@ -280,6 +333,8 @@ export default function OTPreOperativeForm({ facilityId, scheduleId }: Props) {
     saveMutation.mutate({
       schedule_id: scheduleId,
       ...form,
+      surgery_checklist_ids: selectedSurgeryChecklistIds.join(","),
+      day_of_surgery_checklist_ids: selectedDayOfSurgeryChecklistIds.join(","),
     });
   };
 
@@ -489,7 +544,7 @@ export default function OTPreOperativeForm({ facilityId, scheduleId }: Props) {
           </Field>
         </Section>
 
-        <Section title="4. Day Before Surgery Checklist">
+        {/* <Section title="4. Day Before Surgery Checklist">
           <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
             {(
               [
@@ -550,12 +605,48 @@ export default function OTPreOperativeForm({ facilityId, scheduleId }: Props) {
               </label>
             ))}
           </div>
+        </Section> */}
+
+        <Section title="4. Day Before Surgery Checklist">
+          {surgeryCheckListQuery.isLoading ? (
+            <p className="text-sm text-gray-500">
+              Loading surgery checklist...
+            </p>
+          ) : surgeryCheckListQuery.isError ? (
+            <p className="text-sm text-red-600">
+              Unable to load surgery checklist. Please refresh the page.
+            </p>
+          ) : activeSurgeryCheckLists.length === 0 ? (
+            <p className="text-sm text-gray-500">
+              No active surgery checklist items found in Master.
+            </p>
+          ) : (
+            <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+              {activeSurgeryCheckLists.map((item) => (
+                <label key={item.id} className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedSurgeryChecklistIds.includes(item.id)}
+                    onChange={(event) => {
+                      setSelectedSurgeryChecklistIds((previous) =>
+                        event.target.checked
+                          ? [...previous, item.id]
+                          : previous.filter((id) => id !== item.id),
+                      );
+                    }}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <span>{item.checklist_name}</span>
+                </label>
+              ))}
+            </div>
+          )}
         </Section>
       </div>
 
       <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
         <Section title="5. Day of Surgery Checklist">
-          <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+          {/* <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
             {(
               [
                 ["npo_confirmed", "NPO / fasting status confirmed"],
@@ -589,8 +680,34 @@ export default function OTPreOperativeForm({ facilityId, scheduleId }: Props) {
                 <span>{label}</span>
               </label>
             ))}
+          </div> */}
+          <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+            {dayOfSurgeryCheckListQuery.isLoading ? (
+              <p className="text-sm text-gray-500">Loading checklist...</p>
+            ) : activeDayOfSurgeryCheckLists.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                No active day of surgery checklist items found in Master.
+              </p>
+            ) : (
+              activeDayOfSurgeryCheckLists.map((item) => (
+                <label key={item.id} className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedDayOfSurgeryChecklistIds.includes(item.id)}
+                    onChange={(event) => {
+                      setSelectedDayOfSurgeryChecklistIds((previous) =>
+                        event.target.checked
+                          ? [...previous, item.id]
+                          : previous.filter((id) => id !== item.id),
+                      );
+                    }}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <span>{item.checklist_name}</span>
+                </label>
+              ))
+            )}
           </div>
-
           <Field label="Time of departure from ward">
             <Input
               type="time"

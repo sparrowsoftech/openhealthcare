@@ -81,7 +81,7 @@ export function LocationSearch({
       />
       <CommandEmpty>{t("no_locations_found")}</CommandEmpty>
       <CommandGroup>
-        {locations?.results.map((location) => (
+        {filteredLocations.map((location) => (
           <CommandItem
             key={location.id}
             value={location.id}

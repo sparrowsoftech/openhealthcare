@@ -25,11 +25,15 @@ import OTPatientDashboard from "@/pages/Facility/ot/OTPatientDashboard";
 import OTPreOperativeForm from "@/pages/Facility/ot/OTPreOperativeForm";
 import AnaesthesiaForm from "@/pages/Facility/ot/anaesthesia/AnaesthesiaForm";
 import AnaesthesiaList from "@/pages/Facility/ot/anaesthesia/AnaesthesiaList";
+import DayOfSurgeryCheckListForm from "@/pages/Facility/ot/dayOfSurgeryCheckList/DayOfSurgeryCheckListForm";
+import DayOfSurgeryCheckListList from "@/pages/Facility/ot/dayOfSurgeryCheckList/DayOfSurgeryCheckListList";
 import OTSetupForm from "@/pages/Facility/ot/otSetup/OTSetupForm";
 import OTSetupList from "@/pages/Facility/ot/otSetup/OTSetupList";
 import OTSchedulingForm from "@/pages/Facility/ot/scheduling/OTSchedulingForm";
 import SurgeryAnaesthesiaConfigForm from "@/pages/Facility/ot/surgeryAnaesthesiaConfig/SurgeryAnaesthesiaConfigForm";
 import SurgeryAnaesthesiaConfigList from "@/pages/Facility/ot/surgeryAnaesthesiaConfig/SurgeryAnaesthesiaConfigList";
+import SurgeryCheckListForm from "@/pages/Facility/ot/surgeryCheckList/SurgeryCheckListForm";
+import SurgeryCheckListList from "@/pages/Facility/ot/surgeryCheckList/SurgeryCheckListList";
 import SurgeryProcedureForm from "@/pages/Facility/ot/surgeryProcedure/SurgeryProcedureForm";
 import SurgeryProcedureList from "@/pages/Facility/ot/surgeryProcedure/SurgeryProcedureList";
 import OTWaitingList from "@/pages/Facility/ot/waitingList/OTWaitingList";
@@ -66,6 +70,34 @@ const FacilityRoutes: AppRoutes = {
     procedureId,
   }) => (
     <SurgeryProcedureForm facilityId={facilityId} procedureId={procedureId} />
+  ),
+  "/facility/:facilityId/ot/surgery-checklist": ({ facilityId }) => (
+    <SurgeryCheckListList facilityId={facilityId} />
+  ),
+  "/facility/:facilityId/ot/surgery-checklist/new": ({ facilityId }) => (
+    <SurgeryCheckListForm facilityId={facilityId} />
+  ),
+  "/facility/:facilityId/ot/surgery-checklist/:checklistId/edit": ({
+    facilityId,
+    checklistId,
+  }) => (
+    <SurgeryCheckListForm facilityId={facilityId} checklistId={checklistId} />
+  ),
+
+  "/facility/:facilityId/ot/day-of-surgery-checklist": ({ facilityId }) => (
+    <DayOfSurgeryCheckListList facilityId={facilityId} />
+  ),
+  "/facility/:facilityId/ot/day-of-surgery-checklist/new": ({ facilityId }) => (
+    <DayOfSurgeryCheckListForm facilityId={facilityId} />
+  ),
+  "/facility/:facilityId/ot/day-of-surgery-checklist/:checklistId/edit": ({
+    facilityId,
+    checklistId,
+  }) => (
+    <DayOfSurgeryCheckListForm
+      facilityId={facilityId}
+      checklistId={checklistId}
+    />
   ),
   "/facility/:facilityId/ot/waiting-list": ({ facilityId }) => (
     <OTWaitingList facilityId={facilityId} />

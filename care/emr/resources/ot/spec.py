@@ -1,9 +1,17 @@
+from decimal import Decimal
 from enum import Enum
 
 from pydantic import UUID4, Field
 
 from care.emr.models.location import FacilityLocation
-from care.emr.models.ot import OTRoom, SurgeryProcedure, Anaesthesia, SurgeryAnaesthesiaConfig
+from care.emr.models.ot import (
+    Anaesthesia,
+    DayOfSurgeryCheckList,
+    OTRoom,
+    SurgeryAnaesthesiaConfig,
+    SurgeryCheckList,
+    SurgeryProcedure,
+)
 from care.emr.resources.base import EMRResource
 
 
@@ -38,7 +46,7 @@ class OTRoomSpec(OTRoomBaseSpec):
         # None means the field was not supplied; preserve existing selections.
         # An empty list means clear all assigned procedures.
         if self.surgery_procedures is not None:
-            obj._surgery_procedure_ids = self.surgery_procedures
+            obj.surgery_procedure_ids = self.surgery_procedures
 
 
 class OTRoomWriteSpec(OTRoomSpec):
@@ -46,7 +54,7 @@ class OTRoomWriteSpec(OTRoomSpec):
 
 
 class OTRoomUpdateSpec(OTRoomSpec):
-    pass
+    status: OTRoomStatusChoices
 
 
 class OTRoomListSpec(OTRoomSpec):
@@ -108,10 +116,9 @@ class SurgeryProcedureSpec(SurgeryProcedureBaseSpec):
     def perform_extra_deserialization(self, is_update, obj):
         from care.emr.models.organization import FacilityOrganization
 
-        obj.department = FacilityOrganization.objects.get(
-            external_id=self.department
-        )
-        
+        obj.department = FacilityOrganization.objects.get(external_id=self.department)
+
+
 class SurgeryProcedureWriteSpec(SurgeryProcedureSpec):
     pass
 
@@ -151,6 +158,7 @@ class SurgeryProcedureRetrieveSpec(SurgeryProcedureListSpec):
     def perform_extra_serialization(cls, mapping, obj):
         super().perform_extra_serialization(mapping, obj)
         cls.serialize_audit_users(mapping, obj)
+
 
 class AnaesthesiaStatusChoices(str, Enum):
     active = "active"
@@ -209,8 +217,7 @@ class AnaesthesiaRetrieveSpec(AnaesthesiaListSpec):
         cls.serialize_audit_users(mapping, obj)
 
 
-# Surgery–Anaesthesia Configuration
-from decimal import Decimal
+# Surgery-Anaesthesia Configuration
 
 
 class SurgeryAnaesthesiaConfigStatusChoices(str, Enum):
@@ -265,12 +272,8 @@ class SurgeryAnaesthesiaConfigListSpec(SurgeryAnaesthesiaConfigSpec):
     @classmethod
     def perform_extra_serialization(cls, mapping, obj):
         mapping["id"] = str(obj.external_id)
-        mapping["surgery_procedure"] = str(
-            obj.surgery_procedure.external_id
-        )
-        mapping["surgery_procedure_name"] = (
-            obj.surgery_procedure.procedure_name
-        )
+        mapping["surgery_procedure"] = str(obj.surgery_procedure.external_id)
+        mapping["surgery_procedure_name"] = obj.surgery_procedure.procedure_name
         mapping["facility"] = {
             "id": str(obj.facility.external_id),
             "name": obj.facility.name,
@@ -284,6 +287,100 @@ class SurgeryAnaesthesiaConfigListSpec(SurgeryAnaesthesiaConfigSpec):
 
 
 class SurgeryAnaesthesiaConfigRetrieveSpec(SurgeryAnaesthesiaConfigListSpec):
+    created_by: dict | None = None
+    updated_by: dict | None = None
+
+    @classmethod
+    def perform_extra_serialization(cls, mapping, obj):
+        super().perform_extra_serialization(mapping, obj)
+        cls.serialize_audit_users(mapping, obj)
+
+
+class SurgeryCheckListBaseSpec(EMRResource):
+    __model__ = SurgeryCheckList
+
+    id: int | None = None
+
+
+class SurgeryCheckListSpec(SurgeryCheckListBaseSpec):
+    checklist_name: str
+    sequence: int = 1
+    status: str = "active"
+
+
+class SurgeryCheckListWriteSpec(SurgeryCheckListSpec):
+    pass
+
+
+class SurgeryCheckListUpdateSpec(SurgeryCheckListSpec):
+    checklist_name: str
+    sequence: int
+    status: str
+
+
+class SurgeryCheckListListSpec(SurgeryCheckListSpec):
+    created_date: str | None = None
+    modified_date: str | None = None
+
+    @classmethod
+    def perform_extra_serialization(cls, mapping, obj):
+        mapping["id"] = obj.id
+        mapping["created_date"] = (
+            obj.created_date.isoformat() if obj.created_date else None
+        )
+        mapping["modified_date"] = (
+            obj.modified_date.isoformat() if obj.modified_date else None
+        )
+
+
+class SurgeryCheckListRetrieveSpec(SurgeryCheckListListSpec):
+    created_by: dict | None = None
+    updated_by: dict | None = None
+
+    @classmethod
+    def perform_extra_serialization(cls, mapping, obj):
+        super().perform_extra_serialization(mapping, obj)
+        cls.serialize_audit_users(mapping, obj)
+
+
+class DayOfSurgeryCheckListBaseSpec(EMRResource):
+    __model__ = DayOfSurgeryCheckList
+
+    id: int | None = None
+
+
+class DayOfSurgeryCheckListSpec(DayOfSurgeryCheckListBaseSpec):
+    checklist_name: str
+    sequence: int = 1
+    status: str = "active"
+
+
+class DayOfSurgeryCheckListWriteSpec(DayOfSurgeryCheckListSpec):
+    pass
+
+
+class DayOfSurgeryCheckListUpdateSpec(DayOfSurgeryCheckListSpec):
+    checklist_name: str
+    sequence: int
+    status: str
+
+
+class DayOfSurgeryCheckListListSpec(DayOfSurgeryCheckListSpec):
+    created_date: str | None = None
+    modified_date: str | None = None
+
+    @classmethod
+    def perform_extra_serialization(cls, mapping, obj):
+        mapping["id"] = obj.id
+        mapping["created_date"] = (
+            obj.created_date.isoformat() if obj.created_date else None
+        )
+        mapping["modified_date"] = (
+            obj.modified_date.isoformat() if obj.modified_date else None
+        )
+
+
+class DayOfSurgeryCheckListRetrieveSpec(DayOfSurgeryCheckListListSpec):
     created_by: dict | None = None
     updated_by: dict | None = None
 

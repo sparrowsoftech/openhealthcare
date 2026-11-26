@@ -98,6 +98,7 @@ class SurgeryProcedure(EMRBaseModel):
     def __str__(self):
         return f"{self.procedure_code} - {self.procedure_name}"
 
+
 class Anaesthesia(EMRBaseModel):
     facility = models.ForeignKey(
         "facility.Facility",
@@ -178,10 +179,7 @@ class SurgeryAnaesthesiaConfig(EMRBaseModel):
         ordering = ["surgery_procedure__procedure_name", "anaesthesia_format"]
 
     def __str__(self):
-        return (
-            f"{self.surgery_procedure.procedure_name} - "
-            f"{self.anaesthesia_format}"
-        )
+        return f"{self.surgery_procedure.procedure_name} - {self.anaesthesia_format}"
 
 
 class SurgerySchedule(EMRBaseModel):
@@ -239,10 +237,7 @@ class SurgerySchedule(EMRBaseModel):
         ordering = ["scheduled_start"]
 
     def __str__(self):
-        return (
-            f"{self.service_request.title} - "
-            f"{self.scheduled_start}"
-        )
+        return f"{self.service_request.title} - {self.scheduled_start}"
 
 
 class OTPreOperativeAssessment(EMRBaseModel):
@@ -295,6 +290,18 @@ class OTPreOperativeAssessment(EMRBaseModel):
         default=dict,
         blank=True,
         help_text="Pre-operative checklist completed on the day before surgery.",
+    )
+
+    surgery_checklist_ids = models.TextField(
+        blank=True,
+        default="",
+        help_text="Comma-separated Surgery Check List master IDs.",
+    )
+
+    day_of_surgery_checklist_ids = models.TextField(
+        blank=True,
+        default="",
+        help_text="Comma-separated Day of Surgery Check List master IDs.",
     )
 
     day_of_surgery = models.JSONField(
@@ -586,3 +593,47 @@ class OTPatientTransfer(EMRBaseModel):
 
     def __str__(self):
         return f"OT patient transfer: {self.surgery_schedule}"
+
+
+class SurgeryCheckList(EMRBaseModel):
+    checklist_name = models.CharField(max_length=255)
+
+    sequence = models.PositiveIntegerField(default=1)
+
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ("active", "Active"),
+            ("inactive", "Inactive"),
+        ],
+        default="active",
+    )
+
+    class Meta:
+        db_table = "emr_surgery_checklist"
+        ordering = ["sequence"]
+
+    def __str__(self):
+        return self.checklist_name
+
+
+class DayOfSurgeryCheckList(EMRBaseModel):
+    checklist_name = models.CharField(max_length=255)
+
+    sequence = models.PositiveIntegerField(default=1)
+
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ("active", "Active"),
+            ("inactive", "Inactive"),
+        ],
+        default="active",
+    )
+
+    class Meta:
+        db_table = "emr_day_of_surgery_checklist"
+        ordering = ["sequence"]
+
+    def __str__(self):
+        return self.checklist_name

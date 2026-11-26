@@ -104,6 +104,14 @@ function generateFacilityLinks(
           url: `${baseUrl}/ot/surgery-procedures`,
         },
         {
+          name: "Before Surgery Check list",
+          url: `${baseUrl}/ot/surgery-checklist`,
+        },
+        {
+          name: "Day of Surgery Check List",
+          url: `${baseUrl}/ot/day-of-surgery-checklist`,
+        },
+        {
           name: "Surgery–Anaesthesia Rules",
           url: `${baseUrl}/ot/surgery-anaesthesia-config`,
         },

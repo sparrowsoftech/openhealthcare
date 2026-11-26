@@ -4,28 +4,43 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from care.emr.api.viewsets.base import EMRModelViewSet
-from care.emr.models import OTRoom, SurgeryProcedure, Anaesthesia, SurgeryAnaesthesiaConfig
+from care.emr.models import (
+    Anaesthesia,
+    DayOfSurgeryCheckList,
+    OTRoom,
+    SurgeryAnaesthesiaConfig,
+    SurgeryCheckList,
+    SurgeryProcedure,
+)
+from care.emr.models.location import FacilityLocation
+from care.emr.models.organization import FacilityOrganization
 from care.emr.models.patient import PatientIdentifier
 from care.emr.models.service_request import ServiceRequest
-from care.emr.models.organization import FacilityOrganization
-from care.emr.models.location import FacilityLocation
 from care.emr.resources.ot.spec import (
-    OTRoomWriteSpec,
-    OTRoomUpdateSpec,
-    OTRoomListSpec,
-    OTRoomRetrieveSpec,
-    SurgeryProcedureWriteSpec,
-    SurgeryProcedureUpdateSpec,
-    SurgeryProcedureListSpec,
-    SurgeryProcedureRetrieveSpec,
-    AnaesthesiaWriteSpec,
-    AnaesthesiaUpdateSpec,
     AnaesthesiaListSpec,
     AnaesthesiaRetrieveSpec,
-    SurgeryAnaesthesiaConfigWriteSpec,
-    SurgeryAnaesthesiaConfigUpdateSpec,
+    AnaesthesiaUpdateSpec,
+    AnaesthesiaWriteSpec,
+    DayOfSurgeryCheckListListSpec,
+    DayOfSurgeryCheckListRetrieveSpec,
+    DayOfSurgeryCheckListUpdateSpec,
+    DayOfSurgeryCheckListWriteSpec,
+    OTRoomListSpec,
+    OTRoomRetrieveSpec,
+    OTRoomUpdateSpec,
+    OTRoomWriteSpec,
     SurgeryAnaesthesiaConfigListSpec,
     SurgeryAnaesthesiaConfigRetrieveSpec,
+    SurgeryAnaesthesiaConfigUpdateSpec,
+    SurgeryAnaesthesiaConfigWriteSpec,
+    SurgeryCheckListListSpec,
+    SurgeryCheckListRetrieveSpec,
+    SurgeryCheckListUpdateSpec,
+    SurgeryCheckListWriteSpec,
+    SurgeryProcedureListSpec,
+    SurgeryProcedureRetrieveSpec,
+    SurgeryProcedureUpdateSpec,
+    SurgeryProcedureWriteSpec,
 )
 from care.facility.models import Facility
 from care.security.authorization import AuthorizationController
@@ -73,11 +88,7 @@ class OTRoomViewSet(EMRModelViewSet):
 
         if location.status.lower() != "active":
             raise ValidationError(
-                {
-                    "location": (
-                        "Selected room must be active in Location Master."
-                    )
-                }
+                {"location": ("Selected room must be active in Location Master.")}
             )
 
         # Validate selected procedures when the field is supplied.
@@ -97,8 +108,7 @@ class OTRoomViewSet(EMRModelViewSet):
                 raise ValidationError(
                     {
                         "surgery_procedures": (
-                            "Select only active surgery procedures "
-                            "from this facility."
+                            "Select only active surgery procedures from this facility."
                         )
                     }
                 )
@@ -114,11 +124,7 @@ class OTRoomViewSet(EMRModelViewSet):
 
         if duplicate_qs.exists():
             raise ValidationError(
-                {
-                    "location": (
-                        "OT Setup already exists for this room."
-                    )
-                }
+                {"location": ("OT Setup already exists for this room.")}
             )
 
     def authorize_create(self, instance):
@@ -130,19 +136,15 @@ class OTRoomViewSet(EMRModelViewSet):
             None,
             facility,
         ):
-            raise PermissionDenied(
-                "You do not have permission to configure OT rooms."
-            )
+            raise PermissionDenied("You do not have permission to configure OT rooms.")
 
     def authorize_update(self, request_obj, model_instance):
         if not AuthorizationController.call(
             "can_update_facility_location_obj",
             self.request.user,
-            model_instance,
+            model_instance.location,
         ):
-            raise PermissionDenied(
-                "You do not have permission to update OT Setup."
-            )
+            raise PermissionDenied("You do not have permission to update OT Setup.")
 
     def authorize_destroy(self, instance):
         self.authorize_update({}, instance)
@@ -150,7 +152,7 @@ class OTRoomViewSet(EMRModelViewSet):
     def _save_surgery_procedures(self, instance):
         procedure_ids = getattr(
             instance,
-            "_surgery_procedure_ids",
+            "surgery_procedure_ids",
             None,
         )
 
@@ -301,6 +303,7 @@ class SurgeryProcedureViewSet(EMRModelViewSet):
             ]
         )
 
+
 class AnaesthesiaViewSet(EMRModelViewSet):
     database_model = Anaesthesia
     pydantic_model = AnaesthesiaWriteSpec
@@ -438,8 +441,7 @@ class SurgeryAnaesthesiaConfigViewSet(EMRModelViewSet):
             raise ValidationError(
                 {
                     "surgery_procedure": (
-                        "Select an active surgery procedure "
-                        "belonging to this facility."
+                        "Select an active surgery procedure belonging to this facility."
                     )
                 }
             )
@@ -555,20 +557,15 @@ class OTWaitingListViewSet(GenericViewSet):
         patient_ids = {order.patient_id for order in page}
 
         identifiers_by_patient = {}
-        identifiers = (
-            PatientIdentifier.objects.filter(
-                patient_id__in=patient_ids,
-                config__facility=facility,
-                config__status="active",
-            )
-            .select_related("config")
-        )
+        identifiers = PatientIdentifier.objects.filter(
+            patient_id__in=patient_ids,
+            config__facility=facility,
+            config__status="active",
+        ).select_related("config")
 
         for identifier in identifiers:
             config_data = identifier.config.config or {}
-            identifiers_by_patient.setdefault(
-                identifier.patient_id, []
-            ).append(
+            identifiers_by_patient.setdefault(identifier.patient_id, []).append(
                 {
                     "display": config_data.get("display", ""),
                     "use": config_data.get("use", ""),
@@ -606,11 +603,7 @@ class OTWaitingListViewSet(GenericViewSet):
             # If no registration-labelled config exists, use the official identifier.
             if registration_identifier is None:
                 registration_identifier = next(
-                    (
-                        item
-                        for item in patient_identifiers
-                        if item["use"] == "official"
-                    ),
+                    (item for item in patient_identifiers if item["use"] == "official"),
                     None,
                 )
 
@@ -647,19 +640,13 @@ class OTWaitingListViewSet(GenericViewSet):
                         else None
                     ),
                     "doctor_name": doctor_name,
-                    "requester_id": (
-                        str(requester.external_id) if requester else None
-                    ),
+                    "requester_id": (str(requester.external_id) if requester else None),
                     "order_date": (
-                        order.created_date.isoformat()
-                        if order.created_date
-                        else None
+                        order.created_date.isoformat() if order.created_date else None
                     ),
                     "priority": order.priority,
                     "encounter_id": (
-                        str(order.encounter.external_id)
-                        if order.encounter
-                        else None
+                        str(order.encounter.external_id) if order.encounter else None
                     ),
                 }
             )
@@ -668,3 +655,49 @@ class OTWaitingListViewSet(GenericViewSet):
             return paginator.get_paginated_response(results)
 
         return Response({"count": len(results), "results": results})
+
+
+class SurgeryCheckListViewSet(EMRModelViewSet):
+    database_model = SurgeryCheckList
+    lookup_field = "id"
+    pydantic_model = SurgeryCheckListWriteSpec
+    pydantic_update_model = SurgeryCheckListUpdateSpec
+    pydantic_read_model = SurgeryCheckListListSpec
+    pydantic_retrieve_model = SurgeryCheckListRetrieveSpec
+
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted=False).order_by("sequence")
+
+    def perform_destroy(self, instance):
+        instance.deleted = True
+        instance.updated_by = self.request.user
+        instance.save(
+            update_fields=[
+                "deleted",
+                "updated_by",
+                "modified_date",
+            ]
+        )
+
+
+class DayOfSurgeryCheckListViewSet(EMRModelViewSet):
+    database_model = DayOfSurgeryCheckList
+    lookup_field = "id"
+    pydantic_model = DayOfSurgeryCheckListWriteSpec
+    pydantic_update_model = DayOfSurgeryCheckListUpdateSpec
+    pydantic_read_model = DayOfSurgeryCheckListListSpec
+    pydantic_retrieve_model = DayOfSurgeryCheckListRetrieveSpec
+
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted=False).order_by("sequence")
+
+    def perform_destroy(self, instance):
+        instance.deleted = True
+        instance.updated_by = self.request.user
+        instance.save(
+            update_fields=[
+                "deleted",
+                "updated_by",
+                "modified_date",
+            ]
+        )
