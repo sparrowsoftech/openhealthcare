@@ -135,17 +135,17 @@ jobs:
 
           mkdir -p \
             "$RELEASE_DIR/frontend" \
-            "$RELEASE_DIR/care_abdm_fe" \
+            
             "$RELEASE_DIR/care_eka_scribe_fe" \
             "$RELEASE_DIR/care_excalidraw_fe"
 
           cp -a care/frontend/build/. "$RELEASE_DIR/frontend/"
-          cp -a plugins/care_abdm_fe/dist/. "$RELEASE_DIR/care_abdm_fe/"
+         
           cp -a plugins/care_eka_scribe_fe/dist/. "$RELEASE_DIR/care_eka_scribe_fe/"
           cp -a plugins/care_excalidraw_fe/dist/. "$RELEASE_DIR/care_excalidraw_fe/"
 
           test -s "$RELEASE_DIR/frontend/index.html"
-          test -s "$RELEASE_DIR/care_abdm_fe/assets/remoteEntry.js"
+         
           test -s "$RELEASE_DIR/care_eka_scribe_fe/assets/remoteEntry.js"
           test -s "$RELEASE_DIR/care_excalidraw_fe/assets/remoteEntry.js"
 
