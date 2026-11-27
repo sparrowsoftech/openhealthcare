@@ -26,13 +26,7 @@ jobs:
           path: care
           persist-credentials: false
 
-      - name: Checkout pinned ABDM plugin
-        uses: actions/checkout@v5
-        with:
-          repository: ohcnetwork/care_abdm_fe
-          ref: 0f96451ee989e89880870fdffd170cc19c84cfa7
-          path: plugins/care_abdm_fe
-          persist-credentials: false
+      
 
       - name: Checkout pinned EKA Scribe plugin
         uses: actions/checkout@v5
@@ -57,7 +51,6 @@ jobs:
           cache: npm
           cache-dependency-path: |
             care/frontend/package-lock.json
-            plugins/care_abdm_fe/package-lock.json
             plugins/care_eka_scribe_fe/package-lock.json
             plugins/care_excalidraw_fe/package-lock.json
 
@@ -85,18 +78,10 @@ jobs:
           trap 'rm -f .env .env.local' EXIT
 
           npm ci
-          npm run build
+          NODE_OPTIONS=--max-old-space-size=3072 npm run build
 
           test -s build/index.html
 
-      - name: Build ABDM plugin
-        working-directory: plugins/care_abdm_fe
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm ci
-          npm run build
-          test -s dist/assets/remoteEntry.js
 
       - name: Build EKA Scribe plugin
         working-directory: plugins/care_eka_scribe_fe
@@ -140,12 +125,14 @@ jobs:
           npm run build
           test -s dist/assets/remoteEntry.js
 
+      
       - name: Prepare deployment payload
         shell: bash
         run: |
           set -euo pipefail
 
           RELEASE_DIR="$RUNNER_TEMP/uat-release"
+
           mkdir -p \
             "$RELEASE_DIR/frontend" \
             "$RELEASE_DIR/care_abdm_fe" \
@@ -161,6 +148,7 @@ jobs:
           test -s "$RELEASE_DIR/care_abdm_fe/assets/remoteEntry.js"
           test -s "$RELEASE_DIR/care_eka_scribe_fe/assets/remoteEntry.js"
           test -s "$RELEASE_DIR/care_excalidraw_fe/assets/remoteEntry.js"
+
 
       - name: Stage release on UAT runner
         shell: bash
@@ -181,7 +169,7 @@ jobs:
 
           mkdir -m 0700 "$STAGE"
 
-          for component in frontend care_abdm_fe care_eka_scribe_fe care_excalidraw_fe; do
+          for component in frontend care_eka_scribe_fe care_excalidraw_fe; do
             SOURCE="$RELEASE_DIR/$component"
             test -d "$SOURCE"
             test ! -L "$SOURCE"
@@ -189,7 +177,7 @@ jobs:
           done
 
           test -s "$STAGE/frontend/index.html"
-          test -s "$STAGE/care_abdm_fe/assets/remoteEntry.js"
+          
           test -s "$STAGE/care_eka_scribe_fe/assets/remoteEntry.js"
           test -s "$STAGE/care_excalidraw_fe/assets/remoteEntry.js"
 
